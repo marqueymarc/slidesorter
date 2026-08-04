@@ -1,0 +1,25 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+.idea/
+.vscode/
+.venv/
+venv/
+build/
+dist/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+
+# Runtime state must never enter source control.
+.slidesorter/
+state/
+catalog.json
+gallery-config.json
+manifest.json
+action-history.json
+thumbs/
+Removed/
+Staged/

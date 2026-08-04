@@ -1,0 +1,55 @@
+name: Bug report
+description: Report reproducible behavior that differs from the documentation
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach private media, absolute personal paths, or `gallery-config.json`.
+  - type: input
+    id: version
+    attributes:
+      label: SlideSorter version
+      placeholder: "3.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS
+        - Linux
+        - Windows
+        - Container
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Use substitute paths and media names when possible.
+      placeholder: |
+        1. Start SlideSorter with ...
+        2. Open ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Sanitized diagnostics
+      description: Include browser, Python version, and relevant console output. Remove private paths.

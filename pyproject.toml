@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slidesorter"
+version = "3.2.0"
+description = "Local-first photo and video review with recoverable Stage, Remove, and Undo workflows"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{name = "Marc Meyer"}]
+keywords = ["photos", "videos", "media", "gallery", "deduplication", "local-first"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: MacOS X",
+  "Environment :: Web Environment",
+  "Intended Audience :: End Users/Desktop",
+  "Operating System :: MacOS :: MacOS X",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Multimedia :: Graphics :: Viewers",
+  "Topic :: Multimedia :: Video :: Display",
+]
+
+[project.urls]
+Homepage = "https://github.com/marqueymarc/slidesorter"
+Documentation = "https://github.com/marqueymarc/slidesorter/tree/main/docs"
+Issues = "https://github.com/marqueymarc/slidesorter/issues"
+Changelog = "https://github.com/marqueymarc/slidesorter/blob/main/CHANGELOG.md"
+
+[project.scripts]
+slidesorter = "slidesorter.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+slidesorter = ["assets/*"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+include = ["src", "tests"]

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>SlideSorter</title>
+  <link rel="stylesheet" href="/gallery/app.css">
+</head>
+<body>
+  <div class="shell">
+    <header class="masthead">
+      <div class="masthead-top">
+        <div><a class="brand-wordmark" href="/gallery/" target="_blank" rel="noopener" aria-label="Open a new SlideSorter gallery tab">SlideSorter</a><h1 id="title">Media gallery</h1></div>
+        <div class="summary" id="summary">Loading…</div>
+      </div>
+      <div class="toolbar" aria-label="Gallery controls">
+        <label class="search-wrap"><span class="sr-only">Search media</span><input class="control search" id="search" type="search" placeholder="Find a filename or folder" autocomplete="off"><span class="search-hint">/</span></label>
+        <div class="kind-switch" id="kind-switch" aria-label="Media type">
+          <button class="kind-option active" type="button" data-kind="both">Both</button>
+          <button class="kind-option" type="button" data-kind="picture">Pics</button>
+          <button class="kind-option" type="button" data-kind="video">Videos</button>
+        </div>
+        <select class="control sort" id="sort" aria-label="Sort media">
+          <option value="oldest">Oldest first</option>
+          <option value="newest">Newest first</option>
+          <option value="name">Name</option>
+          <option value="size">Largest first</option>
+        </select>
+        <button class="control utility" id="refresh" type="button">Refresh</button>
+        <button class="control utility undo-last" id="undo-last" type="button" disabled>↶ Undo</button>
+        <a class="control utility utility-link" href="/gallery/history.html">History</a>
+        <button class="control utility" id="settings-open" type="button">Settings</button>
+      </div>
+    </header>
+    <main class="gallery" id="gallery" aria-live="polite"></main>
+    <nav class="pagination" id="pagination" aria-label="Gallery pages">
+      <div class="page-tools"><label class="page-size">Show <input id="page-size" type="number" min="25" max="500" step="25" value="100" aria-label="Items per page"></label><button class="page-button" id="select-page" type="button">Select all on page</button><button class="page-button" id="select-all" type="button">Select all results</button></div>
+      <div class="page-nav"><button class="page-button" id="page-previous" type="button">← Previous</button><label class="page-jump">Page <input id="page-number" type="number" min="1" value="1" inputmode="numeric" aria-label="Go to page"> <span>of <span id="page-total">1</span></span></label><button class="page-button" id="page-next" type="button">Next →</button></div>
+    </nav>
+  </div>
+
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.2.0</footer>
+
+  <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div><strong id="bulk-count">0 selected</strong><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></div><div class="bulk-actions"><button class="button bulk-stage" id="bulk-stage" type="button">Stage selected</button><button class="button bulk-remove" id="bulk-remove" type="button">Remove selected</button></div></aside>
+
+  <div class="sheet-scrim" id="settings-scrim" hidden></div>
+  <aside class="settings-sheet" id="settings-sheet" aria-labelledby="settings-title" aria-hidden="true">
+    <div class="sheet-head"><div><p class="eyebrow">Library setup</p><h2 id="settings-title">Settings</h2></div><button class="icon-button" id="settings-close" type="button" aria-label="Close settings">×</button></div>
+    <form id="settings-form">
+      <label class="field"><span>Root tree</span><small>The folder to scan.</small><span class="path-control"><input id="media-root" name="media_root" required><button class="choose" type="button" data-choose="media_root">Choose…</button></span></label>
+      <label class="field"><span>Stage directory</span><small>Moves keep their relative paths beneath this folder.</small><span class="path-control"><input id="staged-root" name="staged_root" required><button class="choose" type="button" data-choose="staged_root">Choose…</button></span></label>
+      <label class="field"><span>Remove directory</span><small>Recoverable holding area; nothing is deleted.</small><span class="path-control"><input id="removed-root" name="removed_root" required><button class="choose" type="button" data-choose="removed_root">Choose…</button></span></label>
+      <label class="field"><span>Include</span><small>Choose what the catalog scans.</small><select id="media-mode" name="media_mode"><option value="both">Pictures and videos</option><option value="pictures">Pictures only</option><option value="videos">Videos only</option></select></label>
+      <label class="field"><span>Items per page</span><small>Use 100 for a responsive starting point; increase it on a faster Mac.</small><input id="page-capacity" name="page_capacity" type="number" min="25" max="500" step="25" value="100" required></label>
+      <details class="advanced"><summary>Display details</summary><label class="field"><span>Collection title</span><input id="gallery-title" name="title" required></label><label class="field"><span>Source label</span><input id="source-label" name="source_label" required></label></details>
+      <p class="settings-note">Stage and Remove may be on other disks. Cross-disk moves can take longer, but remain undoable while the destination file is present.</p>
+      <div class="sheet-actions"><button class="button quiet" id="settings-cancel" type="button">Cancel</button><button class="button primary" id="settings-save" type="submit">Save & rebuild</button></div>
+    </form>
+  </aside>
+
+  <div class="toast-region" id="toasts" aria-live="polite"></div>
+  <script src="/gallery/app.js" defer></script>
+</body>
+</html>
