@@ -2,6 +2,29 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.3.0] - 2026-08-04
+
+### Added
+
+- Ordered, user-defined destination labels and folders in Settings.
+- Direct card and bulk buttons for the first two destinations, with additional destinations under More.
+- Persistent destination configuration across rebuilds and later invocations.
+- Built-in icon and tone hints such as `Remove (use a red trash can glyph)` without an LLM or network service.
+- A remembered Keep directory structure toggle, enabled by default.
+- Flat destination moves with collision detection when directory preservation is disabled.
+
+### Changed
+
+- Generalized move and batch APIs beyond hard-coded Stage and Remove actions.
+- Snapshotted destination labels, icons, and tones in History so old entries retain their meaning after settings change.
+- Migrated existing Stage and Remove configurations automatically.
+
+### Security
+
+- Refused nested or duplicate destination roots.
+- Preflighted duplicate filenames before flat batch moves.
+- Continued refusing destination overwrites and unsafe Undo restores.
+
 ## [3.2.0] - 2026-08-04
 
 ### Added
@@ -37,3 +60,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 - Refused collisions and unsafe Undo restores.
 
 [3.2.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.2.0
+[3.3.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.0

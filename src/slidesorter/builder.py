@@ -15,6 +15,13 @@ from subprocess import DEVNULL, run
 import sys
 from urllib.parse import quote
 
+from .actions import (
+    DestinationAction,
+    actions_from_raw,
+    legacy_actions,
+    validate_actions,
+)
+
 
 def default_state_root() -> Path:
     override = os.environ.get("SLIDESORTER_STATE_DIR")
@@ -46,6 +53,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--removed-name", default="Removed", help="Directory name under the media root")
     parser.add_argument("--staged-root", type=Path)
     parser.add_argument("--removed-root", type=Path)
+    parser.add_argument(
+        "--actions-json",
+        help="JSON array of ordered destination labels and roots; normally managed in Settings",
+    )
+    parser.add_argument(
+        "--keep-structure",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Preserve each source-relative path beneath its destination",
+    )
     parser.add_argument("--media-mode", choices=("videos", "pictures", "both"), default="both")
     parser.add_argument("--thumbnail-width", type=int, default=720)
     parser.add_argument("--thumbnail-policy", choices=("lazy", "eager"), default="lazy")
@@ -53,21 +70,64 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def resolve_action_root(media_root: Path, explicit: Path | None, fallback_name: str) -> Path:
-    value = explicit if explicit is not None else Path(fallback_name)
-    if not value.is_absolute():
-        value = media_root / value
-    return value.expanduser().resolve()
-
-
 def validate_roots(media_root: Path, staged_root: Path, removed_root: Path) -> None:
-    if not media_root.is_dir():
-        raise SystemExit(f"Media root is not a directory: {media_root}")
-    if staged_root == removed_root:
-        raise SystemExit("Staged and Removed must be different directories")
-    for label, root in (("Staged", staged_root), ("Removed", removed_root)):
-        if root == media_root or media_root.is_relative_to(root):
-            raise SystemExit(f"{label} cannot be the media root or one of its parents")
+    """Backward-compatible validator for the original two destinations."""
+
+    try:
+        validate_actions(
+            media_root,
+            (
+                DestinationAction("stage", "Stage", staged_root),
+                DestinationAction("remove", "Remove", removed_root),
+            ),
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+
+
+def remembered_config(gallery_root: Path, media_root: Path) -> dict[str, object] | None:
+    try:
+        raw = json.loads((gallery_root / "gallery-config.json").read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(raw, dict):
+        return None
+    try:
+        remembered_root = Path(str(raw.get("media_root", ""))).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    return raw if remembered_root == media_root else None
+
+
+def configured_actions(
+    args: argparse.Namespace,
+    media_root: Path,
+    remembered: dict[str, object] | None,
+) -> tuple[DestinationAction, ...]:
+    try:
+        if args.actions_json:
+            return actions_from_raw(media_root, json.loads(args.actions_json))
+        if args.staged_root is not None or args.removed_root is not None:
+            return legacy_actions(
+                media_root,
+                args.staged_root,
+                args.removed_root,
+                args.staged_name,
+                args.removed_name,
+            )
+        if remembered and isinstance(remembered.get("actions"), list):
+            return actions_from_raw(media_root, remembered["actions"])
+        if remembered:
+            return legacy_actions(
+                media_root,
+                remembered.get("staged_root"),
+                remembered.get("removed_root"),
+                str(remembered.get("staged_name", args.staged_name)),
+                str(remembered.get("removed_name", args.removed_name)),
+            )
+        return legacy_actions(media_root, None, None, args.staged_name, args.removed_name)
+    except (ValueError, json.JSONDecodeError) as error:
+        raise SystemExit(str(error)) from error
 
 
 def selected_extensions(mode: str) -> set[str]:
@@ -144,9 +204,13 @@ def main(argv: list[str] | None = None) -> None:
     media_root = args.media_root.expanduser().resolve()
     gallery_root = args.gallery_root.expanduser().resolve()
     source_label = args.source_label or media_root.name
-    staged_root = resolve_action_root(media_root, args.staged_root, args.staged_name)
-    removed_root = resolve_action_root(media_root, args.removed_root, args.removed_name)
-    validate_roots(media_root, staged_root, removed_root)
+    remembered = remembered_config(gallery_root, media_root)
+    actions = configured_actions(args, media_root, remembered)
+    keep_structure = (
+        bool(remembered.get("keep_structure", True))
+        if args.keep_structure is None and remembered
+        else args.keep_structure is not False
+    )
     if args.thumbnail_width < 160 or args.thumbnail_width > 2400:
         raise SystemExit("Thumbnail width must be between 160 and 2400 pixels")
     for asset in ASSET_FILES:
@@ -156,9 +220,7 @@ def main(argv: list[str] | None = None) -> None:
     gallery_root.mkdir(parents=True, exist_ok=True)
     thumbs = gallery_root / "thumbs"
     thumbs.mkdir(exist_ok=True)
-    excluded = tuple(
-        root for root in (staged_root, removed_root) if root.is_relative_to(media_root)
-    )
+    excluded = tuple(action.root for action in actions if action.root.is_relative_to(media_root))
     media_files = discover_media(media_root, excluded, selected_extensions(args.media_mode))
 
     results: dict[Path, tuple[Path, str | None]] = {
@@ -213,23 +275,22 @@ def main(argv: list[str] | None = None) -> None:
 
     generated_at = datetime.now().astimezone().isoformat()
     catalog = {
-        "version": 3,
+        "version": 4,
         "generated_at": generated_at,
         "title": args.title,
         "source_label": source_label,
         "media_mode": args.media_mode,
+        "actions": [action.public_dict() for action in actions],
         "items": items,
     }
     config = {
-        "version": 3,
+        "version": 4,
         "media_root": str(media_root),
         "gallery_root": str(gallery_root),
         "title": args.title,
         "source_label": source_label,
-        "staged_root": str(staged_root),
-        "removed_root": str(removed_root),
-        "staged_name": staged_root.name,
-        "removed_name": removed_root.name,
+        "actions": [action.config_dict() for action in actions],
+        "keep_structure": keep_structure,
         "media_mode": args.media_mode,
         "thumbnail_width": args.thumbnail_width,
         "thumbnail_policy": args.thumbnail_policy,

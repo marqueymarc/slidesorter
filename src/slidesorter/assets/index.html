@@ -40,21 +40,25 @@
     </nav>
   </div>
 
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.2.0</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.3.0</footer>
 
-  <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div><strong id="bulk-count">0 selected</strong><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></div><div class="bulk-actions"><button class="button bulk-stage" id="bulk-stage" type="button">Stage selected</button><button class="button bulk-remove" id="bulk-remove" type="button">Remove selected</button></div></aside>
+  <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div><strong id="bulk-count">0 selected</strong><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></div><div class="bulk-actions" id="bulk-actions"></div></aside>
 
   <div class="sheet-scrim" id="settings-scrim" hidden></div>
   <aside class="settings-sheet" id="settings-sheet" aria-labelledby="settings-title" aria-hidden="true">
     <div class="sheet-head"><div><p class="eyebrow">Library setup</p><h2 id="settings-title">Settings</h2></div><button class="icon-button" id="settings-close" type="button" aria-label="Close settings">×</button></div>
     <form id="settings-form">
       <label class="field"><span>Root tree</span><small>The folder to scan.</small><span class="path-control"><input id="media-root" name="media_root" required><button class="choose" type="button" data-choose="media_root">Choose…</button></span></label>
-      <label class="field"><span>Stage directory</span><small>Moves keep their relative paths beneath this folder.</small><span class="path-control"><input id="staged-root" name="staged_root" required><button class="choose" type="button" data-choose="staged_root">Choose…</button></span></label>
-      <label class="field"><span>Remove directory</span><small>Recoverable holding area; nothing is deleted.</small><span class="path-control"><input id="removed-root" name="removed_root" required><button class="choose" type="button" data-choose="removed_root">Choose…</button></span></label>
+      <section class="destination-settings" aria-labelledby="destination-title">
+        <div class="destination-heading"><div><h3 id="destination-title">Destinations</h3><p>The first two become card buttons. Additional destinations appear under More.</p></div><button class="button destination-add" id="destination-add" type="button">＋ Add</button></div>
+        <div class="destination-list" id="destination-list"></div>
+        <p class="destination-hint">Optional presentation hints can follow a label: <code>Remove (use a red trash can glyph)</code>. SlideSorter recognizes a small built-in vocabulary; it does not send labels to an AI service.</p>
+      </section>
+      <label class="toggle-field"><input id="keep-structure" name="keep_structure" type="checkbox" checked><span><strong>Keep directory structure</strong><small>Preserve each path beneath its destination. Turn off to move files directly into the destination folder.</small></span></label>
       <label class="field"><span>Include</span><small>Choose what the catalog scans.</small><select id="media-mode" name="media_mode"><option value="both">Pictures and videos</option><option value="pictures">Pictures only</option><option value="videos">Videos only</option></select></label>
       <label class="field"><span>Items per page</span><small>Use 100 for a responsive starting point; increase it on a faster Mac.</small><input id="page-capacity" name="page_capacity" type="number" min="25" max="500" step="25" value="100" required></label>
       <details class="advanced"><summary>Display details</summary><label class="field"><span>Collection title</span><input id="gallery-title" name="title" required></label><label class="field"><span>Source label</span><input id="source-label" name="source_label" required></label></details>
-      <p class="settings-note">Stage and Remove may be on other disks. Cross-disk moves can take longer, but remain undoable while the destination file is present.</p>
+      <p class="settings-note">Destinations may be on other disks. Cross-disk moves can take longer, but remain undoable while the destination file is present. Nothing is overwritten.</p>
       <div class="sheet-actions"><button class="button quiet" id="settings-cancel" type="button">Cancel</button><button class="button primary" id="settings-save" type="submit">Save & rebuild</button></div>
     </form>
   </aside>

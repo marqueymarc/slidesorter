@@ -2,7 +2,7 @@
 
 ## Threat model
 
-SlideSorter exposes write-capable Stage, Remove, Settings, and Undo APIs. It has no built-in accounts, sessions, or passwords.
+SlideSorter exposes write-capable destination, Settings, and Undo APIs. It has no built-in accounts, sessions, or passwords.
 
 Never forward its port directly from an internet router. Never publish it through an anonymous tunnel.
 

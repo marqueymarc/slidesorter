@@ -19,6 +19,13 @@ import threading
 from urllib.parse import parse_qs, unquote, urlsplit
 from uuid import uuid4
 
+from .actions import (
+    DestinationAction,
+    action_presentation,
+    actions_from_raw,
+    legacy_actions,
+    validate_actions,
+)
 from .builder import DEFAULT_GALLERY_ROOT, thumbnail_for
 
 
@@ -35,21 +42,16 @@ PUBLIC_GALLERY_FILES = {
 }
 
 
-def resolve_action_root(media_root: Path, value: object, fallback: str) -> Path:
-    path = Path(str(value or fallback)).expanduser()
-    if not path.is_absolute():
-        path = media_root / path
-    return path.resolve()
-
-
 def validate_roots(media_root: Path, staged_root: Path, removed_root: Path) -> None:
-    if not media_root.is_dir():
-        raise ValueError(f"Root tree is not an existing directory: {media_root}")
-    if staged_root == removed_root:
-        raise ValueError("Stage and Remove directories must be different")
-    for label, root in (("Stage", staged_root), ("Remove", removed_root)):
-        if root == media_root or media_root.is_relative_to(root):
-            raise ValueError(f"{label} cannot be the root tree or one of its parents")
+    """Backward-compatible validator for the original two destinations."""
+
+    validate_actions(
+        media_root,
+        (
+            DestinationAction("stage", "Stage", staged_root),
+            DestinationAction("remove", "Remove", removed_root),
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -58,8 +60,8 @@ class GalleryConfig:
     gallery_root: Path
     title: str
     source_label: str
-    staged_root: Path
-    removed_root: Path
+    actions: tuple[DestinationAction, ...]
+    keep_structure: bool
     media_mode: str
     thumbnail_width: int
     thumbnail_policy: str
@@ -73,13 +75,19 @@ class GalleryConfig:
             raise SystemExit(f"Gallery config not found: {path}. Run the gallery builder first.") from error
         media_root = Path(raw["media_root"]).expanduser().resolve()
         gallery_root = Path(raw["gallery_root"]).expanduser().resolve()
-        staged_root = resolve_action_root(
-            media_root, raw.get("staged_root"), str(raw.get("staged_name", "Staged"))
-        )
-        removed_root = resolve_action_root(
-            media_root, raw.get("removed_root"), str(raw.get("removed_name", "Removed"))
-        )
-        validate_roots(media_root, staged_root, removed_root)
+        try:
+            if isinstance(raw.get("actions"), list):
+                actions = actions_from_raw(media_root, raw["actions"])
+            else:
+                actions = legacy_actions(
+                    media_root,
+                    raw.get("staged_root"),
+                    raw.get("removed_root"),
+                    str(raw.get("staged_name", "Staged")),
+                    str(raw.get("removed_name", "Removed")),
+                )
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
         mode = str(raw.get("media_mode", "videos"))
         if mode not in MEDIA_MODES:
             raise SystemExit(f"Unsupported media mode in config: {mode}")
@@ -93,8 +101,8 @@ class GalleryConfig:
             gallery_root=gallery_root,
             title=str(raw.get("title", "Media gallery")),
             source_label=str(raw.get("source_label", media_root.name)),
-            staged_root=staged_root,
-            removed_root=removed_root,
+            actions=actions,
+            keep_structure=bool(raw.get("keep_structure", True)),
             media_mode=mode,
             thumbnail_width=int(raw.get("thumbnail_width", 720)),
             thumbnail_policy=thumbnail_policy,
@@ -104,9 +112,7 @@ class GalleryConfig:
     @classmethod
     def from_settings(cls, current: "GalleryConfig", raw: dict[str, object]) -> "GalleryConfig":
         media_root = Path(str(raw.get("media_root", ""))).expanduser().resolve()
-        staged_root = resolve_action_root(media_root, raw.get("staged_root"), "Staged")
-        removed_root = resolve_action_root(media_root, raw.get("removed_root"), "Removed")
-        validate_roots(media_root, staged_root, removed_root)
+        actions = actions_from_raw(media_root, raw.get("actions"))
         mode = str(raw.get("media_mode", ""))
         if mode not in MEDIA_MODES:
             raise ValueError("Include must be Pictures, Videos, or Both")
@@ -114,13 +120,16 @@ class GalleryConfig:
         source_label = str(raw.get("source_label", "")).strip()
         if not title or not source_label:
             raise ValueError("Gallery title and source label are required")
+        keep_structure = raw.get("keep_structure", True)
+        if not isinstance(keep_structure, bool):
+            raise ValueError("Keep directory structure must be on or off")
         return cls(
             media_root=media_root,
             gallery_root=current.gallery_root,
             title=title,
             source_label=source_label,
-            staged_root=staged_root,
-            removed_root=removed_root,
+            actions=actions,
+            keep_structure=keep_structure,
             media_mode=mode,
             thumbnail_width=current.thumbnail_width,
             thumbnail_policy=current.thumbnail_policy,
@@ -139,11 +148,23 @@ class GalleryConfig:
     def history_path(self) -> Path:
         return self.gallery_root / "action-history.json"
 
+    @property
+    def action_roots(self) -> tuple[Path, ...]:
+        return tuple(action.root for action in self.actions)
+
+    def action_for_id(self, action_id: object) -> DestinationAction:
+        if not isinstance(action_id, str):
+            raise ValueError("A destination action is required")
+        action = next((candidate for candidate in self.actions if candidate.id == action_id), None)
+        if action is None:
+            raise ValueError("The selected destination is no longer configured")
+        return action
+
     def public_settings(self) -> dict[str, object]:
         return {
             "media_root": str(self.media_root),
-            "staged_root": str(self.staged_root),
-            "removed_root": str(self.removed_root),
+            "actions": [action.public_dict() for action in self.actions],
+            "keep_structure": self.keep_structure,
             "media_mode": self.media_mode,
             "title": self.title,
             "source_label": self.source_label,
@@ -156,8 +177,8 @@ class GalleryConfig:
             "--gallery-root", str(self.gallery_root),
             "--title", self.title,
             "--source-label", self.source_label,
-            "--staged-root", str(self.staged_root),
-            "--removed-root", str(self.removed_root),
+            "--actions-json", json.dumps([action.config_dict() for action in self.actions]),
+            "--keep-structure" if self.keep_structure else "--no-keep-structure",
             "--media-mode", self.media_mode,
             "--thumbnail-width", str(self.thumbnail_width),
             "--thumbnail-policy", self.thumbnail_policy,
@@ -213,6 +234,25 @@ def write_history(config: GalleryConfig, entries: list[dict[str, object]]) -> No
     temporary.replace(config.history_path)
 
 
+def existing_history_media(entry: dict[str, object]) -> Path | None:
+    roots_and_values = (
+        (entry.get("media_root"), entry.get("source")),
+        (entry.get("action_root"), entry.get("destination")),
+    )
+    for root_value, path_value in roots_and_values:
+        if not root_value or not path_value:
+            continue
+        root = Path(str(root_value)).resolve()
+        candidate = Path(str(path_value)).resolve()
+        if (
+            candidate.suffix.lower() in MEDIA_EXTENSIONS
+            and candidate.is_file()
+            and candidate.is_relative_to(root)
+        ):
+            return candidate
+    return None
+
+
 def load_catalog(config: GalleryConfig) -> dict[str, object]:
     try:
         catalog = json.loads((config.gallery_root / "catalog.json").read_text(encoding="utf-8"))
@@ -227,10 +267,12 @@ def backfill_history_thumbnails(config: GalleryConfig) -> int:
     entries = read_history(config)
     changed = 0
     for entry in entries:
+        if not entry.get("entry_id"):
+            entry["entry_id"] = uuid4().hex
+            changed += 1
         if entry.get("thumbnail_url"):
             continue
-        candidates = (Path(str(entry.get("source", ""))), Path(str(entry.get("destination", ""))))
-        media = next((candidate.resolve() for candidate in candidates if candidate.is_file()), None)
+        media = existing_history_media(entry)
         if media is None or media.suffix.lower() not in MEDIA_EXTENSIONS:
             continue
         kind = "video" if media.suffix.lower() in VIDEO_EXTENSIONS else "picture"
@@ -254,7 +296,7 @@ def display_time(value: object) -> str:
 
 class GalleryHandler(SimpleHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
-    server_version = "SlideSorter/3"
+    server_version = "SlideSorter/4"
 
     @property
     def config(self) -> GalleryConfig:
@@ -313,9 +355,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             source = inside(self.config.media_root, relative)
             if source.suffix.lower() not in MEDIA_EXTENSIONS or not source.is_file():
                 raise ValueError("Thumbnail source is not an existing media file")
-            for action_root in (self.config.staged_root, self.config.removed_root):
+            for action_root in self.config.action_roots:
                 if action_root.is_relative_to(self.config.media_root) and source.is_relative_to(action_root):
-                    raise ValueError("Staged and Removed thumbnails are private")
+                    raise ValueError("Destination thumbnails are private")
             kind = "video" if source.suffix.lower() in VIDEO_EXTENSIONS else "picture"
             with self.thumbnail_lock:
                 thumb, problem = thumbnail_for(
@@ -329,9 +371,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             media = inside(self.config.media_root, relative)
             if media.suffix.lower() not in MEDIA_EXTENSIONS:
                 raise ValueError("Only configured media files can be served")
-            for action_root in (self.config.staged_root, self.config.removed_root):
+            for action_root in self.config.action_roots:
                 if action_root.is_relative_to(self.config.media_root) and media.is_relative_to(action_root):
-                    raise ValueError("Staged and Removed files are not exposed by this gallery")
+                    raise ValueError("Destination files are not exposed by this gallery")
             return media, True
         raise FileNotFoundError
 
@@ -443,9 +485,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             raise ValueError("A relative media id is required")
         relative = safe_relative(value)
         source = inside(self.config.media_root, relative)
-        for action_root in (self.config.staged_root, self.config.removed_root):
+        for action_root in self.config.action_roots:
             if action_root.is_relative_to(self.config.media_root) and source.is_relative_to(action_root):
-                raise ValueError("Staged or Removed items cannot be acted on here")
+                raise ValueError("Items already inside a destination cannot be acted on here")
         if source.suffix.lower() not in MEDIA_EXTENSIONS or not source.is_file():
             raise ValueError("The requested source is not an existing picture or video")
         return source, relative
@@ -470,6 +512,12 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             public["undone_label"] = display_time(entry.get("undone_at"))
             public["kind"] = "video" if Path(str(entry.get("name", ""))).suffix.lower() in VIDEO_EXTENSIONS else "picture"
             public["media_url"] = f"/api/history-media/{entry.get('entry_id', '')}"
+            fallback_label = "Remove" if entry.get("action") == "remove" else "Stage"
+            label = str(entry.get("action_label", fallback_label))
+            display, icon, tone = action_presentation(label)
+            public["action_label"] = display
+            public["action_icon"] = str(entry.get("action_icon", icon))
+            public["action_tone"] = str(entry.get("action_tone", tone))
             public_entries.append(public)
         return {
             "entries": public_entries,
@@ -486,19 +534,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             )
             if entry is None:
                 raise ValueError("History media not found")
-            allowed_roots = (
-                self.config.media_root.resolve(),
-                self.config.staged_root.resolve(),
-                self.config.removed_root.resolve(),
-            )
-            for value in (entry.get("source"), entry.get("destination")):
-                candidate = Path(str(value or "")).resolve()
-                if (
-                    candidate.suffix.lower() in MEDIA_EXTENSIONS
-                    and candidate.is_file()
-                    and any(candidate.is_relative_to(root) for root in allowed_roots)
-                ):
-                    return candidate
+            candidate = existing_history_media(entry)
+            if candidate is not None:
+                return candidate
         raise ValueError("History media is no longer available")
 
     def ordered_catalog_items(self, query: str, kind: str, sort: str) -> list[dict[str, object]]:
@@ -544,6 +582,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "title": self.catalog.get("title", self.config.title),
             "source_label": self.catalog.get("source_label", self.config.source_label),
             "media_mode": self.catalog.get("media_mode", self.config.media_mode),
+            "actions": [action.public_dict() for action in self.config.actions],
+            "keep_structure": self.config.keep_structure,
             "total": len(all_items),
             "filtered_total": len(filtered),
             "pictures": pictures,
@@ -622,8 +662,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             if isinstance(existing, str) and existing.startswith("/gallery/thumbs/"):
                 self.redirect(existing)
                 return
-            candidates = (Path(str(entry.get("source", ""))), Path(str(entry.get("destination", ""))))
-            media = next((candidate.resolve() for candidate in candidates if candidate.is_file()), None)
+            media = existing_history_media(entry)
             if media is None or media.suffix.lower() not in MEDIA_EXTENSIONS:
                 raise ValueError("History media is no longer available")
             kind = "video" if media.suffix.lower() in VIDEO_EXTENSIONS else "picture"
@@ -641,9 +680,10 @@ class GalleryHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:
         action = urlsplit(self.path).path
         allowed = {
-            "/api/reveal", "/api/remove", "/api/stage", "/api/refresh",
+            "/api/reveal", "/api/move", "/api/bulk-move", "/api/refresh",
+            "/api/remove", "/api/stage", "/api/bulk-stage", "/api/bulk-remove",
             "/api/settings", "/api/undo", "/api/choose-directory",
-            "/api/bulk-stage", "/api/bulk-remove", "/api/catalog-range",
+            "/api/catalog-range",
         }
         if action not in allowed:
             self.respond_json(HTTPStatus.NOT_FOUND, {"error": "Unknown action"})
@@ -667,13 +707,16 @@ class GalleryHandler(SimpleHTTPRequestHandler):
                     self.refresh_gallery()
                 elif action == "/api/undo":
                     self.undo_move(self.read_json_body(allow_empty=True))
-                elif action in {"/api/bulk-stage", "/api/bulk-remove"}:
-                    self.bulk_move(
-                        "remove" if action == "/api/bulk-remove" else "stage",
-                        self.read_json_body(max_length=8 * 1024 * 1024),
-                    )
+                elif action in {"/api/bulk-move", "/api/bulk-stage", "/api/bulk-remove"}:
+                    body = self.read_json_body(max_length=8 * 1024 * 1024)
+                    if action != "/api/bulk-move":
+                        body["action_id"] = "remove" if action == "/api/bulk-remove" else "stage"
+                    self.bulk_move(body)
                 else:
-                    self.move_media("remove" if action == "/api/remove" else "stage", self.read_json_body())
+                    body = self.read_json_body()
+                    if action != "/api/move":
+                        body["action_id"] = "remove" if action == "/api/remove" else "stage"
+                    self.move_media(body)
         except (ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
             self.respond_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
         except subprocess.TimeoutExpired:
@@ -698,8 +741,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         field = str(body.get("field", ""))
         prompts = {
             "media_root": "Choose the root tree to scan",
-            "staged_root": "Choose the Stage directory",
-            "removed_root": "Choose the Remove directory",
+            "action_root": "Choose a destination directory",
         }
         if field not in prompts:
             raise ValueError("Unknown directory setting")
@@ -730,12 +772,21 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self.reload_runtime()
         self.respond_json(HTTPStatus.OK, {"gallery_refreshed": True})
 
-    def move_media(self, action: str, body: dict[str, object]) -> None:
+    def destination_for(
+        self,
+        action: DestinationAction,
+        source: Path,
+        relative: PurePosixPath,
+    ) -> Path:
+        destination_relative = relative if self.config.keep_structure else PurePosixPath(source.name)
+        return inside(action.root, destination_relative)
+
+    def move_media(self, body: dict[str, object]) -> None:
+        action = self.config.action_for_id(body.get("action_id"))
         source, relative = self.source_from_id(body.get("id"))
-        destination_root = self.config.removed_root if action == "remove" else self.config.staged_root
-        destination = inside(destination_root, relative)
+        destination = self.destination_for(action, source, relative)
         if destination.exists():
-            raise ValueError(f"A file with this preserved path already exists in {destination_root}")
+            raise ValueError(f"A file named {destination.name} already exists in {action.root}")
         destination.parent.mkdir(parents=True, exist_ok=True)
         kind = "video" if source.suffix.lower() in VIDEO_EXTENSIONS else "picture"
         with self.thumbnail_lock:
@@ -744,15 +795,20 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             )
         thumbnail_url = f"/gallery/thumbs/{thumb.name}" if not thumbnail_problem and thumb.is_file() else None
         now = datetime.now().astimezone().isoformat()
+        display_label, icon, tone = action_presentation(action.label)
         entry: dict[str, object] = {
+            "entry_id": uuid4().hex,
             "token": uuid4().hex,
-            "action": action,
+            "action": action.id,
+            "action_label": display_label,
+            "action_icon": icon,
+            "action_tone": tone,
             "name": source.name,
             "relative": relative.as_posix(),
             "source": str(source),
             "destination": str(destination),
             "media_root": str(self.config.media_root),
-            "action_root": str(destination_root),
+            "action_root": str(action.root),
             "created_at": now,
             "status": "planned",
             "thumbnail_url": thumbnail_url,
@@ -778,6 +834,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             ]
         payload: dict[str, object] = {
             "token": entry["token"], "name": source.name, "moved_to": str(destination),
+            "destination_label": display_label,
             "gallery_refreshed": succeeded, "thumbnail_url": thumbnail_url,
         }
         if not succeeded:
@@ -831,34 +888,44 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             raise ValueError("A bulk operation is limited to 50,000 items")
         return items
 
-    def bulk_move(self, action: str, body: dict[str, object]) -> None:
+    def bulk_move(self, body: dict[str, object]) -> None:
+        action = self.config.action_for_id(body.get("action_id"))
         items = self.resolve_bulk_items(body)
-        destination_root = self.config.removed_root if action == "remove" else self.config.staged_root
         prepared: list[tuple[Path, Path, PurePosixPath, dict[str, object]]] = []
         for item in items:
             source, relative = self.source_from_id(item.get("id"))
-            destination = inside(destination_root, relative)
+            destination = self.destination_for(action, source, relative)
             if destination.exists():
                 raise ValueError(f"A file with this preserved path already exists: {destination}")
             prepared.append((source, destination, relative, item))
+
+        destination_paths = [destination for _, destination, _, _ in prepared]
+        if len(destination_paths) != len(set(destination_paths)):
+            raise ValueError(
+                "This selection contains duplicate filenames. Enable Keep directory structure or move smaller groups."
+            )
 
         token = uuid4().hex
         now = datetime.now().astimezone().isoformat()
         history = read_history(self.config)
         entries: list[dict[str, object]] = []
+        display_label, icon, tone = action_presentation(action.label)
         for source, destination, relative, _ in prepared:
             entry_id = uuid4().hex
             entry: dict[str, object] = {
                 "entry_id": entry_id,
                 "token": token,
                 "batch_size": len(prepared),
-                "action": action,
+                "action": action.id,
+                "action_label": display_label,
+                "action_icon": icon,
+                "action_tone": tone,
                 "name": source.name,
                 "relative": relative.as_posix(),
                 "source": str(source),
                 "destination": str(destination),
                 "media_root": str(self.config.media_root),
-                "action_root": str(destination_root),
+                "action_root": str(action.root),
                 "created_at": now,
                 "status": "planned",
                 "thumbnail_url": f"/api/history-thumbnail/{entry_id}",
@@ -900,7 +967,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "token": token,
             "count": moved,
             "requested": len(prepared),
-            "destination": str(destination_root),
+            "destination": str(action.root),
+            "destination_label": display_label,
             "gallery_refreshed": succeeded,
             "thumbnail_url": entries[0]["thumbnail_url"],
         }

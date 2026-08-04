@@ -40,7 +40,7 @@ You may place state in a temporary directory for browsing-only sessions:
 slidesorter run "/path/to/Media" --state-dir "$(mktemp -d)"
 ```
 
-Do not use ephemeral state when you need durable Undo history. Stage and Remove alter media even if the journal later disappears.
+Do not use ephemeral state when you need durable Undo history. Destination actions alter media even if the journal later disappears.
 
 ## Deleting state
 

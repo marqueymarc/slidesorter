@@ -2,6 +2,16 @@ const list = document.querySelector("#history-list");
 const undoLast = document.querySelector("#history-undo-last");
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
 let activePreview = null;
+const iconPaths = {
+  trash: '<path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/>',
+  tray: '<path d="M12 15V3m0 0L7 8m5-5 5 5M4 14v6h16v-6"/>',
+  archive: '<path d="M4 7h16v13H4zM3 4h18v3H3zm6 8h6"/>',
+  star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
+  check: '<path d="m4 12 5 5L20 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
+  arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+};
+const iconMarkup = icon => `<svg class="action-glyph" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${iconPaths[icon] || iconPaths.arrow}</svg>`;
 
 function toast(message, error = false) {
   const item = document.createElement("div");
@@ -55,7 +65,7 @@ function render(result) {
   closePreview();
   undoLast.disabled = !result.can_undo;
   if (!result.entries.length) {
-    list.innerHTML = `<div class="empty">No recorded moves yet. New Stage and Remove actions will appear here.</div>`;
+    list.innerHTML = `<div class="empty">No recorded moves yet. New destination actions will appear here.</div>`;
     return;
   }
   list.innerHTML = result.entries.map(entry => {
@@ -69,7 +79,7 @@ function render(result) {
     const preview = `<button class="history-preview" type="button" data-media="${escapeHtml(entry.media_url)}" data-kind="${escapeHtml(entry.kind)}" data-name="${escapeHtml(entry.name)}" aria-label="${escapeHtml(previewLabel)}" aria-controls="${previewId}" aria-expanded="false">${thumbnail}<span class="history-preview-action" aria-hidden="true">${entry.kind === "video" ? "▶" : "↗"}</span></button>`;
     const batch = Number(entry.batch_size || 1);
     const meta = batch > 1 ? `${escapeHtml(entry.created_label)} · ${batch.toLocaleString()}-item batch` : escapeHtml(entry.created_label);
-    return `<article class="history-item"><span class="history-pill ${entry.action === "remove" ? "remove" : ""}">${escapeHtml(entry.action)}</span>${preview}<div class="history-paths"><h2 class="history-name">${escapeHtml(entry.name)}</h2><div class="history-route" title="${escapeHtml(entry.source)}">${escapeHtml(entry.source)} → ${escapeHtml(entry.destination)}</div><div class="history-meta">${meta}</div></div><div>${active ? `<button class="button history-undo" type="button" data-token="${escapeHtml(entry.token)}">${batch > 1 ? "Undo batch" : "Undo"}</button>` : `<span class="history-status">${status}</span>`}</div><div class="history-expanded" id="${previewId}" hidden></div></article>`;
+    return `<article class="history-item"><span class="history-pill tone-${escapeHtml(entry.action_tone)}">${iconMarkup(entry.action_icon)}${escapeHtml(entry.action_label)}</span>${preview}<div class="history-paths"><h2 class="history-name">${escapeHtml(entry.name)}</h2><div class="history-route" title="${escapeHtml(entry.source)}">${escapeHtml(entry.source)} → ${escapeHtml(entry.destination)}</div><div class="history-meta">${meta}</div></div><div>${active ? `<button class="button history-undo" type="button" data-token="${escapeHtml(entry.token)}">${batch > 1 ? "Undo batch" : "Undo"}</button>` : `<span class="history-status">${status}</span>`}</div><div class="history-expanded" id="${previewId}" hidden></div></article>`;
   }).join("");
 }
 

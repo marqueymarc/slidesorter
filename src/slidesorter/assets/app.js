@@ -21,9 +21,64 @@ const selectAll = document.querySelector("#select-all");
 const bulkBar = document.querySelector("#bulk-bar");
 const pageNumber = document.querySelector("#page-number");
 const pageTotal = document.querySelector("#page-total");
+const destinationList = document.querySelector("#destination-list");
+const bulkActions = document.querySelector("#bulk-actions");
 pageSize.value = String(state.pageSize);
 
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
+
+const iconPaths = {
+  trash: '<path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/>',
+  tray: '<path d="M12 15V3m0 0L7 8m5-5 5 5M4 14v6h16v-6"/>',
+  archive: '<path d="M4 7h16v13H4zM3 4h18v3H3zm6 8h6"/>',
+  star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
+  check: '<path d="m4 12 5 5L20 6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
+  arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+};
+
+function iconMarkup(icon) {
+  const path = iconPaths[icon] || iconPaths.arrow;
+  return `<svg class="action-glyph" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+}
+
+function actionPresentation(rawLabel) {
+  const value = String(rawLabel || "").trim().replace(/\s+/g, " ");
+  const match = value.match(/^(.+?)\s*\(([^()]*)\)\s*$/);
+  const hintWords = /glyph|icon|color|colour|trash|trashcan|bin|delete|discard|remove|tray|stage|upload|import|inbox|archive|box|store|star|favorite|favourite|check|keep|approve|clock|later|review|hold|pending|red|danger|amber|orange|yellow|blue|green|mint|gray|grey|neutral|plain/i;
+  const hint = match && hintWords.test(match[2]) ? match[2].toLowerCase() : "";
+  const displayLabel = hint ? match[1].trim() : value;
+  const semantics = `${displayLabel} ${hint}`.toLowerCase();
+  const rules = [
+    ["trash", /trash|trashcan|bin|delete|discard|remove/],
+    ["tray", /tray|stage|upload|import|inbox/],
+    ["archive", /archive|box|store|file away/],
+    ["star", /star|favorite|favourite|best/],
+    ["check", /check|keep|approve|accepted/],
+    ["clock", /clock|later|review|hold|pending/],
+  ];
+  const tones = [
+    ["danger", /red|danger|destructive|trash|delete|discard|remove/],
+    ["amber", /amber|orange|yellow|star|favorite|archive/],
+    ["blue", /blue|review|later|hold|clock/],
+    ["mint", /green|mint|stage|upload|import|keep|approve|check/],
+    ["neutral", /gray|grey|neutral|plain/],
+  ];
+  return {
+    display_label: displayLabel || "Destination",
+    icon: rules.find(([, pattern]) => pattern.test(semantics))?.[0] || "arrow",
+    tone: tones.find(([, pattern]) => pattern.test(semantics))?.[0] || "neutral",
+  };
+}
+
+function actionButtonMarkup(action, extraClass = "") {
+  return `<button class="action move-action tone-${escapeHtml(action.tone)} ${extraClass}" type="button" data-action-id="${escapeHtml(action.id)}" title="Move to ${escapeHtml(action.display_label)}">${iconMarkup(action.icon)}<span>${escapeHtml(action.display_label)}</span></button>`;
+}
+
+function overflowMarkup(actions, extraClass = "") {
+  if (!actions.length) return "";
+  return `<div class="action-menu-wrap ${extraClass}"><button class="action more-actions" type="button" aria-haspopup="menu" aria-expanded="false">More <span aria-hidden="true">⌄</span></button><div class="action-menu" role="menu" hidden>${actions.map(action => `<button class="action-menu-item move-action tone-${escapeHtml(action.tone)}" type="button" role="menuitem" data-action-id="${escapeHtml(action.id)}">${iconMarkup(action.icon)}<span>${escapeHtml(action.display_label)}</span></button>`).join("")}</div></div>`;
+}
 
 function toast(message, options = {}) {
   const item = document.createElement("div");
@@ -171,6 +226,11 @@ function updateSelectionUI() {
   });
 }
 
+function renderBulkActions() {
+  const actions = state.catalog?.actions || [];
+  bulkActions.innerHTML = `${actions.slice(0, 2).map(action => actionButtonMarkup(action, "bulk-move")).join("")}${overflowMarkup(actions.slice(2), "bulk-overflow")}`;
+}
+
 function updateSummary() {
   const result = state.catalog;
   const visible = result.filtered_total === result.total ? `${result.total} items` : `${result.filtered_total} of ${result.total}`;
@@ -188,10 +248,13 @@ function cardMarkup(item, index) {
   const thumb = `<img class="poster" src="${escapeHtml(item.thumbnail_url)}" alt="Thumbnail for ${escapeHtml(item.name)}" loading="lazy">`;
   const play = item.kind === "video" ? `<button class="play-here" type="button" aria-label="Play ${escapeHtml(item.name)} here" title="Play here"></button>` : "";
   const verb = item.kind === "video" ? "Play in new tab" : "Open photo";
+  const actions = state.catalog.actions || [];
+  const directActions = actions.slice(0, 2).map(action => actionButtonMarkup(action)).join("");
+  const moreActions = overflowMarkup(actions.slice(2));
   return `<article class="card ${selected ? "selected" : ""}" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 12) * 18}ms">
     <div class="preview"><a class="preview-link" href="${escapeHtml(item.viewer_url)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(item.name)} in a new tab">${thumb}</a>${play}<span class="kind-badge">${item.kind === "video" ? "Video" : "Pic"}</span><label class="card-select" title="Select ${escapeHtml(item.name)}"><input class="card-checkbox" type="checkbox" ${selected ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></label></div>
     <div class="card-body"><h2 class="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h2><p class="folder" title="${escapeHtml(item.folder)}">${escapeHtml(item.folder || state.catalog.source_label)}</p><div class="metadata"><span>${escapeHtml(item.size_label)}</span><span>${escapeHtml(item.modified_label)}</span></div>
-      <div class="actions"><div class="action-row"><a class="action primary" href="${escapeHtml(item.viewer_url)}" target="_blank" rel="noopener">↗ ${verb}</a><button class="action secondary reveal" type="button">Finder</button></div><div class="action-row file-row"><button class="action stage" type="button">Stage</button><button class="action remove" type="button">Remove</button></div></div>
+      <div class="actions"><div class="action-row"><a class="action primary" href="${escapeHtml(item.viewer_url)}" target="_blank" rel="noopener">↗ ${verb}</a><button class="action secondary reveal" type="button">Finder</button></div><div class="action-row file-row destination-actions">${directActions}${moreActions}</div></div>
     </div></article>`;
 }
 
@@ -210,6 +273,7 @@ function render() {
   if (state.kind === "picture" && state.catalog.media_mode === "videos") emptyMessage = `Pictures are not in the current catalog. <button class="button empty-settings" type="button">Change Settings</button>`;
   if (state.kind === "video" && state.catalog.media_mode === "pictures") emptyMessage = `Videos are not in the current catalog. <button class="button empty-settings" type="button">Change Settings</button>`;
   gallery.innerHTML = items.length ? items.map(cardMarkup).join("") : `<div class="empty">${emptyMessage}</div>`;
+  renderBulkActions();
   updateSummary();
   updateSelectionUI();
 }
@@ -335,17 +399,17 @@ async function undo(token = null) {
   } catch (error) { toast(error.message, { error: true }); }
 }
 
-async function performMove(name, item, button, card) {
+async function performMove(action, item, button, card) {
+  closeActionMenus();
   button.disabled = true;
   const transition = captureGalleryTransition(new Set([item.id]));
   try {
-    const result = await jsonRequest(`/api/${name}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }) });
+    const result = await jsonRequest("/api/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, action_id: action.id }) });
     await fadeDepartures(transition);
     if (isSelected(item)) setItemSelected(item, false);
     await loadCatalog(false, transition);
     undoLast.disabled = false;
-    const destination = name === "stage" ? "Staged" : "Removed";
-    toast(result.warning || `${item.name} moved to ${destination}`, {
+    toast(result.warning || `${item.name} moved to ${result.destination_label || action.display_label}`, {
       error: Boolean(result.warning), thumbnail: result.thumbnail_url,
       actionLabel: "Undo", onAction: () => undo(result.token), duration: 12000,
     });
@@ -355,34 +419,31 @@ async function performMove(name, item, button, card) {
   }
 }
 
-async function performBulkMove(name) {
+async function performBulkMove(action) {
+  closeActionMenus();
   const count = selectedCount();
   if (!count) return;
-  const stage = document.querySelector("#bulk-stage");
-  const remove = document.querySelector("#bulk-remove");
+  const buttons = [...bulkActions.querySelectorAll("button")];
   const visibleSelected = new Set((state.catalog?.items || []).filter(isSelected).map(item => item.id));
   const transition = captureGalleryTransition(visibleSelected);
-  stage.disabled = true;
-  remove.disabled = true;
+  buttons.forEach(button => { button.disabled = true; });
   try {
-    const result = await jsonRequest(`/api/bulk-${name}`, {
+    const result = await jsonRequest("/api/bulk-move", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ selection: selectionPayload() }),
+      body: JSON.stringify({ selection: selectionPayload(), action_id: action.id }),
     });
     await fadeDepartures(transition);
     clearSelection();
     await loadCatalog(false, transition);
     await updateUndoState();
-    const destination = name === "stage" ? "Staged" : "Removed";
-    toast(result.warning || `${result.count.toLocaleString()} items moved to ${destination}`, {
+    toast(result.warning || `${result.count.toLocaleString()} items moved to ${result.destination_label || action.display_label}`, {
       error: Boolean(result.warning), thumbnail: result.thumbnail_url,
       actionLabel: "Undo", onAction: () => undo(result.token), duration: 15000,
     });
   } catch (error) {
     toast(error.message, { error: true, duration: 12000 });
   } finally {
-    stage.disabled = false;
-    remove.disabled = false;
+    buttons.forEach(button => { button.disabled = false; });
   }
 }
 
@@ -406,12 +467,52 @@ function closeSettings() {
   document.querySelector("#settings-open").focus();
 }
 
+function newActionId() {
+  return `action-${crypto.randomUUID().replaceAll("-", "")}`;
+}
+
+function destinationRowMarkup(action) {
+  const presentation = action.display_label ? action : actionPresentation(action.label);
+  return `<article class="destination-row" data-action-id="${escapeHtml(action.id || newActionId())}">
+    <div class="destination-row-head"><span class="destination-order"></span><span class="destination-preview tone-${escapeHtml(presentation.tone)}">${iconMarkup(presentation.icon)}<strong>${escapeHtml(presentation.display_label)}</strong></span><div class="destination-order-actions"><button class="mini-button destination-up" type="button" aria-label="Move destination up">↑</button><button class="mini-button destination-down" type="button" aria-label="Move destination down">↓</button><button class="mini-button destination-delete" type="button" aria-label="Remove destination">×</button></div></div>
+    <label class="compact-field"><span>Button label</span><input class="destination-label" value="${escapeHtml(action.label || "")}" maxlength="120" placeholder="Review later (blue clock icon)" required></label>
+    <label class="compact-field"><span>Destination folder</span><span class="path-control"><input class="destination-root" value="${escapeHtml(action.root || "")}" required><button class="choose" type="button" data-choose="action_root">Choose…</button></span></label>
+  </article>`;
+}
+
+function refreshDestinationRows() {
+  const rows = [...destinationList.querySelectorAll(".destination-row")];
+  rows.forEach((row, index) => {
+    row.querySelector(".destination-order").textContent = String(index + 1).padStart(2, "0");
+    row.querySelector(".destination-up").disabled = index === 0;
+    row.querySelector(".destination-down").disabled = index === rows.length - 1;
+    row.querySelector(".destination-delete").disabled = rows.length === 1;
+    const presentation = actionPresentation(row.querySelector(".destination-label").value);
+    const preview = row.querySelector(".destination-preview");
+    preview.className = `destination-preview tone-${presentation.tone}`;
+    preview.innerHTML = `${iconMarkup(presentation.icon)}<strong>${escapeHtml(presentation.display_label)}</strong>`;
+  });
+}
+
+function renderDestinationEditor(actions) {
+  destinationList.innerHTML = actions.map(destinationRowMarkup).join("");
+  refreshDestinationRows();
+}
+
+function collectDestinationActions() {
+  return [...destinationList.querySelectorAll(".destination-row")].map(row => ({
+    id: row.dataset.actionId,
+    label: row.querySelector(".destination-label").value.trim(),
+    root: row.querySelector(".destination-root").value.trim(),
+  }));
+}
+
 async function openSettings() {
   try {
     const config = await jsonRequest("/api/settings");
     document.querySelector("#media-root").value = config.media_root;
-    document.querySelector("#staged-root").value = config.staged_root;
-    document.querySelector("#removed-root").value = config.removed_root;
+    renderDestinationEditor(config.actions);
+    document.querySelector("#keep-structure").checked = config.keep_structure !== false;
     document.querySelector("#media-mode").value = config.media_mode;
     document.querySelector("#gallery-title").value = config.title;
     document.querySelector("#source-label").value = config.source_label;
@@ -427,7 +528,10 @@ async function chooseDirectory(button) {
   button.disabled = true;
   try {
     const result = await jsonRequest("/api/choose-directory", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ field: button.dataset.choose }) });
-    document.querySelector(`#${button.dataset.choose.replaceAll("_", "-")}`).value = result.path;
+    const target = button.dataset.choose === "media_root"
+      ? document.querySelector("#media-root")
+      : button.closest(".destination-row").querySelector(".destination-root");
+    target.value = result.path;
   } catch (error) {
     if (error.message !== "No folder selected") toast(error.message, { error: true });
   } finally { button.disabled = false; }
@@ -447,6 +551,28 @@ function goToEnteredPage() {
   if (target !== state.page) changePage(target);
 }
 
+function configuredAction(actionId) {
+  return state.catalog?.actions?.find(action => action.id === actionId);
+}
+
+function closeActionMenus(except = null) {
+  document.querySelectorAll(".action-menu-wrap.open").forEach(wrapper => {
+    if (wrapper === except) return;
+    wrapper.classList.remove("open");
+    wrapper.querySelector(".action-menu").hidden = true;
+    wrapper.querySelector(".more-actions").setAttribute("aria-expanded", "false");
+  });
+}
+
+function toggleActionMenu(button) {
+  const wrapper = button.closest(".action-menu-wrap");
+  const opening = !wrapper.classList.contains("open");
+  closeActionMenus(wrapper);
+  wrapper.classList.toggle("open", opening);
+  wrapper.querySelector(".action-menu").hidden = !opening;
+  button.setAttribute("aria-expanded", String(opening));
+}
+
 gallery.addEventListener("click", event => {
   if (event.target.closest(".empty-settings")) { openSettings(); return; }
   const card = event.target.closest(".card");
@@ -460,10 +586,14 @@ gallery.addEventListener("click", event => {
   }
   if (event.target.closest(".play-here")) { playHere(card, item); return; }
   if (event.target.closest(".reveal")) { jsonRequest("/api/reveal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }) }).catch(error => toast(error.message, { error: true })); return; }
-  const stage = event.target.closest(".stage");
-  if (stage) { performMove("stage", item, stage, card); return; }
-  const remove = event.target.closest(".remove");
-  if (remove) { performMove("remove", item, remove, card); return; }
+  const more = event.target.closest(".more-actions");
+  if (more) { toggleActionMenu(more); return; }
+  const move = event.target.closest(".move-action");
+  if (move) {
+    const action = configuredAction(move.dataset.actionId);
+    if (action) performMove(action, item, move, card);
+    return;
+  }
   if (event.target.closest("a")) {
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       event.preventDefault();
@@ -520,15 +650,44 @@ selectAll.addEventListener("click", () => {
   updateSelectionUI();
 });
 document.querySelector("#bulk-clear").addEventListener("click", clearSelection);
-document.querySelector("#bulk-stage").addEventListener("click", () => performBulkMove("stage"));
-document.querySelector("#bulk-remove").addEventListener("click", () => performBulkMove("remove"));
+bulkActions.addEventListener("click", event => {
+  const more = event.target.closest(".more-actions");
+  if (more) { toggleActionMenu(more); return; }
+  const move = event.target.closest(".move-action");
+  if (!move) return;
+  const action = configuredAction(move.dataset.actionId);
+  if (action) performBulkMove(action);
+});
 document.querySelector("#refresh").addEventListener("click", refreshCatalog);
 undoLast.addEventListener("click", () => undo());
 document.querySelector("#settings-open").addEventListener("click", openSettings);
 document.querySelector("#settings-close").addEventListener("click", closeSettings);
 document.querySelector("#settings-cancel").addEventListener("click", closeSettings);
 scrim.addEventListener("click", closeSettings);
-document.querySelectorAll(".choose").forEach(button => button.addEventListener("click", () => chooseDirectory(button)));
+document.querySelector("#settings-form").addEventListener("click", event => {
+  const choose = event.target.closest(".choose");
+  if (choose) { chooseDirectory(choose); return; }
+  const row = event.target.closest(".destination-row");
+  if (!row) return;
+  if (event.target.closest(".destination-up") && row.previousElementSibling) {
+    destinationList.insertBefore(row, row.previousElementSibling);
+    refreshDestinationRows();
+  } else if (event.target.closest(".destination-down") && row.nextElementSibling) {
+    destinationList.insertBefore(row.nextElementSibling, row);
+    refreshDestinationRows();
+  } else if (event.target.closest(".destination-delete") && destinationList.children.length > 1) {
+    row.remove();
+    refreshDestinationRows();
+  }
+});
+destinationList.addEventListener("input", event => {
+  if (event.target.matches(".destination-label")) refreshDestinationRows();
+});
+document.querySelector("#destination-add").addEventListener("click", () => {
+  destinationList.insertAdjacentHTML("beforeend", destinationRowMarkup({ id: newActionId(), label: "Review later (blue clock icon)", root: "" }));
+  refreshDestinationRows();
+  destinationList.querySelector(".destination-row:last-child .destination-label").focus();
+});
 document.querySelector("#settings-form").addEventListener("submit", async event => {
   event.preventDefault();
   const save = document.querySelector("#settings-save");
@@ -537,6 +696,8 @@ document.querySelector("#settings-form").addEventListener("submit", async event 
   try {
     const form = new FormData(event.currentTarget);
     const settings = Object.fromEntries(form);
+    settings.actions = collectDestinationActions();
+    settings.keep_structure = document.querySelector("#keep-structure").checked;
     const requestedPageSize = Math.max(25, Math.min(500, Math.round(Number(settings.page_capacity || 100) / 25) * 25));
     delete settings.page_capacity;
     await jsonRequest("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
@@ -557,7 +718,12 @@ document.querySelector("#settings-form").addEventListener("submit", async event 
 document.addEventListener("keydown", event => {
   if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target.matches("input,textarea,select")) { event.preventDefault(); search.focus(); }
   if (event.key === "Escape" && sheet.classList.contains("open")) closeSettings();
+  if (event.key === "Escape") closeActionMenus();
   if (event.code === "Space" && state.active && !event.target.matches("input,textarea,button,a,select")) { event.preventDefault(); state.active.video.paused ? state.active.video.play() : state.active.video.pause(); }
+});
+
+document.addEventListener("click", event => {
+  if (!event.target.closest(".action-menu-wrap")) closeActionMenus();
 });
 
 Promise.all([loadCatalog(), updateUndoState()]);

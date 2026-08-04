@@ -25,6 +25,8 @@ slidesorter run MEDIA_ROOT [options]
 | `--source-label` | Media root name | Short source description |
 | `--staged-root` | `MEDIA_ROOT/Staged` | Staging destination |
 | `--removed-root` | `MEDIA_ROOT/Removed` | Recoverable removal destination |
+| `--keep-structure` | enabled | Preserve source-relative paths at destinations |
+| `--no-keep-structure` | — | Move files directly into destination folders |
 | `--media-mode` | `both` | `pictures`, `videos`, or `both` |
 | `--thumbnail-width` | `720` | Thumbnail pixel width |
 | `--thumbnail-policy` | `lazy` | Generate on demand or eagerly |
@@ -50,11 +52,21 @@ slidesorter serve --config PATH [--host HOST] [--port PORT]
 
 The default config is the platform default state path.
 
+## Destination settings
+
+The browser Settings panel stores an ordered `actions` list in `gallery-config.json`. Each entry has a stable id, a raw label, and an absolute destination root. The first two actions are direct buttons; later actions appear under More.
+
+The builder preserves actions and the directory-structure setting when the same state directory is rebuilt or started again. Existing Stage and Remove configuration migrates automatically.
+
+Labels may end with a recognized presentation hint, for example `Remove (use a red trash can glyph)`. This is deterministic local parsing, not an LLM call. Unknown parentheticals remain part of the visible label.
+
 ## Root constraints
 
-Stage and Remove must differ. Neither can equal the media root or contain the media root. They may live inside or outside the media root.
+Destination folders must differ and cannot contain one another. A destination cannot equal the media root or contain the media root. Destinations may live inside or outside the media root.
 
-SlideSorter creates destination parent directories during moves. It does not require Stage and Remove to exist before the first move.
+SlideSorter creates destination parent directories during moves. Destinations do not need to exist before the first move.
+
+With Keep directory structure enabled, `/Root/A/B/photo.jpg` moves to `/Destination/A/B/photo.jpg`. With it disabled, the same file moves to `/Destination/photo.jpg`. Flat single and batch moves refuse collisions.
 
 ## Thumbnail policy
 

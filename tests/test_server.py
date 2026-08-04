@@ -5,6 +5,7 @@ import tempfile
 import threading
 import unittest
 
+from slidesorter.actions import DestinationAction
 from slidesorter.server import (
     GalleryConfig,
     GalleryHandler,
@@ -52,6 +53,42 @@ class RangeTests(unittest.TestCase):
             GalleryHandler.parse_range("bytes=100-101", 100)
 
 
+class DestinationPathTests(unittest.TestCase):
+    def make_handler(self, root: Path, keep_structure: bool) -> tuple[GalleryHandler, DestinationAction]:
+        media = root / "media"
+        state = root / "state"
+        destination = media / "Removed"
+        media.mkdir()
+        state.mkdir()
+        action = DestinationAction("remove", "Remove", destination.resolve())
+        config = GalleryConfig(
+            media_root=media.resolve(), gallery_root=state.resolve(), title="Fixture",
+            source_label="Fixture", actions=(action,), keep_structure=keep_structure,
+            media_mode="both", thumbnail_width=720, thumbnail_policy="lazy", workers=1,
+        )
+        handler = object.__new__(GalleryHandler)
+        handler.server = SimpleNamespace(gallery_config=config)
+        return handler, action
+
+    def test_structure_on_preserves_source_relative_path(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            handler, action = self.make_handler(Path(temporary), True)
+            source = handler.config.media_root / "Trips" / "photo.jpg"
+            self.assertEqual(
+                handler.destination_for(action, source, safe_relative("Trips/photo.jpg")),
+                action.root / "Trips" / "photo.jpg",
+            )
+
+    def test_structure_off_flattens_to_filename(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            handler, action = self.make_handler(Path(temporary), False)
+            source = handler.config.media_root / "Trips" / "photo.jpg"
+            self.assertEqual(
+                handler.destination_for(action, source, safe_relative("Trips/photo.jpg")),
+                action.root / "photo.jpg",
+            )
+
+
 class HistoryMediaTests(unittest.TestCase):
     def test_history_media_resolves_journaled_destination(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -72,6 +109,8 @@ class HistoryMediaTests(unittest.TestCase):
                 "destination": str(destination),
                 "name": "clip.mov",
                 "status": "moved",
+                "media_root": str(media.resolve()),
+                "action_root": str(staged.resolve()),
             }
             (state / "action-history.json").write_text(json.dumps([entry]))
             config = GalleryConfig(
@@ -79,8 +118,11 @@ class HistoryMediaTests(unittest.TestCase):
                 gallery_root=state.resolve(),
                 title="Fixture",
                 source_label="Fixture",
-                staged_root=staged.resolve(),
-                removed_root=removed.resolve(),
+                actions=(
+                    DestinationAction("stage", "Stage", staged.resolve()),
+                    DestinationAction("remove", "Remove", removed.resolve()),
+                ),
+                keep_structure=True,
                 media_mode="both",
                 thumbnail_width=720,
                 thumbnail_policy="lazy",
@@ -103,7 +145,12 @@ class HistoryMediaTests(unittest.TestCase):
             (state / "action-history.json").write_text("[]")
             config = GalleryConfig(
                 media_root=media.resolve(), gallery_root=state.resolve(), title="Fixture",
-                source_label="Fixture", staged_root=staged.resolve(), removed_root=removed.resolve(),
+                source_label="Fixture",
+                actions=(
+                    DestinationAction("stage", "Stage", staged.resolve()),
+                    DestinationAction("remove", "Remove", removed.resolve()),
+                ),
+                keep_structure=True,
                 media_mode="both", thumbnail_width=720, thumbnail_policy="lazy", workers=1,
             )
             handler = object.__new__(GalleryHandler)

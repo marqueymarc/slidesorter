@@ -27,7 +27,7 @@ Safe defaults:
 - run one server per state directory;
 - grant access only to trusted users;
 - use Tailscale Serve for remote access;
-- keep Stage and Remove paths deliberate;
+- keep every destination path deliberate;
 - never run as root;
 - never mount more filesystem scope than needed.
 

@@ -21,6 +21,12 @@ def run_parser() -> argparse.ArgumentParser:
     parser.add_argument("--source-label")
     parser.add_argument("--staged-root", type=Path)
     parser.add_argument("--removed-root", type=Path)
+    parser.add_argument(
+        "--keep-structure",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Preserve source-relative paths beneath destination folders",
+    )
     parser.add_argument("--media-mode", choices=("videos", "pictures", "both"), default="both")
     parser.add_argument("--thumbnail-width", type=int, default=720)
     parser.add_argument("--thumbnail-policy", choices=("lazy", "eager"), default="lazy")
@@ -58,6 +64,8 @@ def run(argv: list[str]) -> None:
         build_args.extend(("--staged-root", str(args.staged_root)))
     if args.removed_root:
         build_args.extend(("--removed-root", str(args.removed_root)))
+    if args.keep_structure is not None:
+        build_args.append("--keep-structure" if args.keep_structure else "--no-keep-structure")
     builder.main(build_args)
     server.main(
         [

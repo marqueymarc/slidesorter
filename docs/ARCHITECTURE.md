@@ -11,7 +11,7 @@ flowchart LR
   C --> D["Local HTTP server"]
   A --> D
   D --> E["Browser UI"]
-  E -->|"Stage / Remove / Undo"| D
+  E -->|"Destination move / Undo"| D
   D -->|"Validated file moves"| A
 ```
 
@@ -21,6 +21,7 @@ The package contains no database and no user media. The builder derives a JSON c
 
 ```text
 src/slidesorter/
+├── actions.py
 ├── cli.py
 ├── builder.py
 ├── server.py
@@ -63,18 +64,18 @@ Static assets are copied into state during each build. This ensures one state di
 
 ## File action transaction
 
-Stage and Remove use this sequence:
+Every configured destination uses this sequence:
 
 1. Decode and validate a media-root-relative ID.
-2. Reject Stage and Remove descendants as source files.
-3. Resolve the destination beneath its configured root.
+2. Reject configured destination descendants as source files.
+3. Resolve the destination beneath its configured root, preserving the relative path or flattening to the filename according to Settings.
 4. Reject an existing destination.
 5. Append a `planned` journal record.
 6. Move the file.
 7. Mark the journal record `moved`.
 8. Rebuild and reload the catalog.
 
-Batch actions preflight every destination before moving the first file.
+Batch actions preflight every destination and detect flat-name collisions before moving the first file.
 
 ## Undo transaction
 
@@ -88,7 +89,7 @@ Shift ranges use a read-only endpoint that resolves anchor and target positions 
 
 ## History previews
 
-History media uses journal entry IDs, not arbitrary paths. The server resolves only an existing recorded source or destination beneath the current media, Stage, or Remove roots. Videos use the same byte-range implementation as gallery playback.
+History media uses journal entry IDs, not arbitrary paths. The server resolves only an existing recorded source or destination beneath the roots snapshotted in that journal entry. This remains safe and usable if a destination is later renamed or removed from Settings. Videos use the same byte-range implementation as gallery playback.
 
 ## Concurrency model
 

@@ -8,7 +8,7 @@ slidesorter run "/path/to/Media" --title "My Media"
 
 Open `http://127.0.0.1:8765/gallery/`.
 
-SlideSorter scans recursively. It excludes configured Stage and Remove trees when those trees live under the media root.
+SlideSorter scans recursively. It excludes every configured destination tree when that tree lives under the media root.
 
 ## Browse
 
@@ -35,9 +35,11 @@ When inline playback ends, SlideSorter restores the card poster and selector.
 
 Range selection works across pagination because the server resolves the ordered range.
 
-## Stage media
+## Route media
 
-Stage moves selected files beneath the configured Stage root. SlideSorter preserves each relative path.
+The first run creates Stage and Remove destinations. Settings can rename, reorder, remove, or add destinations. The first two appear as direct card and bulk buttons. Additional destinations appear under More.
+
+By default, SlideSorter preserves each relative path:
 
 Example:
 
@@ -46,11 +48,29 @@ Source: /Media/2024/Trip/IMG_1001.mov
 Stage:  /Media/Staged/2024/Trip/IMG_1001.mov
 ```
 
-Use Stage for an import queue, review queue, or later processing step.
+Turn off Keep directory structure to flatten moves:
 
-## Remove media
+```text
+Source: /Media/2024/Trip/IMG_1001.mov
+Remove: /Media/Removed/IMG_1001.mov
+```
 
-Remove moves selected files beneath the configured Remove root. It does not delete them.
+Flat moves refuse duplicate filenames and never overwrite an existing destination.
+
+Use destinations for import queues, review groups, favorites, archives, or recoverable removal. Remove still does not delete media.
+
+### Presentation hints
+
+SlideSorter recognizes a small local vocabulary in a final parenthetical:
+
+```text
+Remove (use a red trash can glyph)
+Review later (blue clock icon)
+Favorites (amber star)
+Approved (green check)
+```
+
+The parenthetical is hidden from the button and History label after its built-in icon and tone are selected. Ordinary labels such as `Vacation (2018)` remain unchanged. No prompt is sent to an LLM or network service.
 
 Review the holding directory before deleting anything with Finder or another tool.
 
@@ -67,7 +87,7 @@ Undo:
 
 ## Use History
 
-History loads the most recent 500 journal entries. Click a thumbnail to expand a picture or play a video in place. Use the native video controls for seeking.
+History loads the most recent 500 journal entries. Each entry retains the destination label and presentation used when the move occurred. Click a thumbnail to expand a picture or play a video in place. Use the native video controls for seeking.
 
 Click the thumbnail again, click ×, or press Escape to close a preview. Use Open full size to create a separate media tab.
 
@@ -80,8 +100,8 @@ Click Refresh after adding, renaming, moving, or deleting files outside SlideSor
 Settings can change:
 
 - media root;
-- Stage root;
-- Remove root;
+- ordered destination labels and folders;
+- Keep directory structure behavior;
 - picture/video inclusion;
 - collection title;
 - source label;

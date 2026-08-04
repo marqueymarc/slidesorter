@@ -55,6 +55,32 @@ class BuilderTests(unittest.TestCase):
             catalog = json.loads((state / "catalog.json").read_text())
             self.assertEqual([item["id"] for item in catalog["items"]], ["keep.jpg"])
 
+    def test_destinations_and_structure_setting_survive_the_next_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "media"
+            state = root / "state"
+            media.mkdir()
+            (media / "photo.jpg").write_bytes(b"photo")
+            actions = [
+                {"id": "keep", "label": "Keep (green check icon)", "root": str(media / "Keep")},
+                {"id": "later", "label": "Review later", "root": str(media / "Later")},
+                {"id": "remove", "label": "Remove (red trash icon)", "root": str(media / "Removed")},
+            ]
+            builder.main(
+                [
+                    "--media-root", str(media),
+                    "--gallery-root", str(state),
+                    "--actions-json", json.dumps(actions),
+                    "--no-keep-structure",
+                ]
+            )
+            builder.main(["--media-root", str(media), "--gallery-root", str(state)])
+
+            config = json.loads((state / "gallery-config.json").read_text())
+            self.assertEqual([action["id"] for action in config["actions"]], ["keep", "later", "remove"])
+            self.assertFalse(config["keep_structure"])
+
 
 if __name__ == "__main__":
     unittest.main()

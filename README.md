@@ -7,7 +7,7 @@ Review large picture and video trees without uploading them anywhere.
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
 
-SlideSorter is a local-first media review desk. It scans a directory, builds thumbnails, and presents a fast browser gallery. Stage files for later import. Move unwanted files into a recoverable holding directory. Undo either action from a persistent journal.
+SlideSorter is a local-first media review desk. It scans a directory, builds thumbnails, and presents a fast browser gallery. Route files into named import, review, archive, or removal folders. Undo every move from a persistent journal.
 
 Your media stays on your machine. The GitHub repository and container image contain no catalog, thumbnails, paths, history, or user data.
 
@@ -20,7 +20,9 @@ Your media stays on your machine. The GitHub repository and container image cont
 - Play videos inline with seeking and keyboard play/pause.
 - Expand pictures without leaving the gallery.
 - Select one item, a page, a Shift range, or all filtered results.
-- Stage or remove individual items and batches.
+- Route individual items and batches to configurable destination folders.
+- Keep the first two destinations as direct buttons and place additional labels under More.
+- Use lightweight label hints for built-in glyphs and tones without an AI service.
 - Preserve relative directory paths during every move.
 - Undo single and batch moves from the History journal.
 - Preview moved pictures and videos directly in History.
@@ -30,16 +32,16 @@ Your media stays on your machine. The GitHub repository and container image cont
 
 ## Safety first
 
-Stage and Remove **move files**. Remove means “move into a recoverable holding directory,” not permanent deletion.
+Destination actions **move files**. The default Remove action means “move into a recoverable holding directory,” not permanent deletion.
 
 SlideSorter:
 
 - refuses paths outside the configured media root;
 - refuses destination collisions;
 - records planned moves before touching files;
-- preserves each relative source path;
+- records exact original and destination paths;
 - refuses Undo when the original path is occupied;
-- excludes Stage and Remove trees from the active gallery;
+- excludes every configured destination tree from the active gallery;
 - binds to `127.0.0.1` unless you explicitly choose another host.
 
 Back up irreplaceable media before reorganizing it. See [Security](SECURITY.md) and [State and privacy](docs/STATE_AND_PRIVACY.md).
@@ -70,7 +72,7 @@ sudo apt-get install ffmpeg
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.2.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.3.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -110,7 +112,7 @@ Stop the server with `Control-C`.
 
 ## Choose explicit destinations
 
-Keep Stage and Remove on the same filesystem for fast renames:
+The first run creates Stage and Remove defaults. Keep them on the same filesystem for fast renames:
 
 ```sh
 slidesorter run "/Volumes/Archive/Media" \
@@ -126,6 +128,12 @@ slidesorter run "/Volumes/Archive/Media" \
   --staged-root "/Volumes/Import Queue" \
   --removed-root "/Volumes/Review Holding"
 ```
+
+After startup, use Settings to rename, reorder, remove, or add up to 16 destinations. The first two stay visible as buttons; the rest appear under More. Destination settings survive rebuilds and later invocations that use the same state directory.
+
+Keep directory structure is enabled by default. Disable it to move files directly into each destination root. Flat moves refuse duplicate filenames and existing destinations.
+
+Labels can include a deterministic presentation hint such as `Remove (use a red trash can glyph)`. SlideSorter maps recognized words to built-in icons and tones locally; it does not call an LLM.
 
 Cross-filesystem moves may copy before removing the source. Keep the computer awake.
 
@@ -188,7 +196,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.2.0
+  ghcr.io/marqueymarc/slidesorter:3.3.0
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.
@@ -220,8 +228,8 @@ See [Remote access](docs/REMOTE_ACCESS.md) for threat-model details.
 | Shift-click | Toggle the ordered range from the anchor |
 | Select all on page | Select or clear the visible page |
 | Select all results | Select the current filter without downloading every ID |
-| Stage | Move into the Stage root |
-| Remove | Move into the Remove root |
+| First two destination buttons | Move into those configured roots |
+| More | Show any additional destination labels |
 | Undo | Restore the original path |
 | History thumbnail | Expand a picture or play a video in place |
 | Space | Play or pause the active inline video |
