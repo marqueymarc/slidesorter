@@ -24,7 +24,7 @@ Your media stays on your machine. The GitHub repository and container image cont
 - Keep the first two destinations as direct buttons and place additional labels under More.
 - Use lightweight label hints for built-in glyphs and tones without an AI service.
 - Preserve relative directory paths during every move.
-- Undo single and batch moves from the History journal.
+- Undo one History item or all remaining items in its batch.
 - Preview moved pictures and videos directly in History.
 - Reconcile History with files moved or deleted outside SlideSorter.
 - Keep Purged records at the bottom, then expire them under a remembered retention policy.
@@ -74,7 +74,7 @@ sudo apt-get install ffmpeg
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.4.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.5.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -198,7 +198,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.4.0
+  ghcr.io/marqueymarc/slidesorter:3.5.0
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.

@@ -68,6 +68,7 @@ function render(result) {
     list.innerHTML = `<div class="empty">No recorded moves yet. New destination actions will appear here.</div>`;
     return;
   }
+  const renderedBatches = new Set();
   list.innerHTML = result.entries.map(entry => {
     const active = entry.undo_available === true;
     const statusLabels = {
@@ -90,8 +91,20 @@ function render(result) {
       ? `<button class="history-preview" type="button" data-media="${escapeHtml(entry.media_url)}" data-kind="${escapeHtml(entry.kind)}" data-name="${escapeHtml(entry.name)}" aria-label="${escapeHtml(previewLabel)}" aria-controls="${previewId}" aria-expanded="false">${thumbnail}<span class="history-preview-action" aria-hidden="true">${entry.kind === "video" ? "▶" : "↗"}</span></button>`
       : `<span class="history-preview history-preview-unavailable" aria-label="Media unavailable">${thumbnail}<span class="history-preview-missing" aria-hidden="true">—</span></span>`;
     const batch = Number(entry.batch_size || 1);
-    const meta = batch > 1 ? `${escapeHtml(entry.created_label)} · ${batch.toLocaleString()}-item batch` : escapeHtml(entry.created_label);
-    return `<article class="history-item ${entry.status === "purged" ? "purged" : ""}"><span class="history-pill tone-${escapeHtml(entry.action_tone)}">${iconMarkup(entry.action_icon)}${escapeHtml(entry.action_label)}</span>${preview}<div class="history-paths"><h2 class="history-name">${escapeHtml(entry.name)}</h2><div class="history-route" title="${escapeHtml(entry.source)}">${escapeHtml(entry.source)} → ${escapeHtml(entry.destination)}</div><div class="history-meta">${meta}</div></div><div>${active ? `<button class="button history-undo" type="button" data-token="${escapeHtml(entry.token)}">${batch > 1 ? "Undo batch" : "Undo"}</button>` : `<span class="history-status">${status}</span>`}</div><div class="history-expanded" id="${previewId}" hidden></div></article>`;
+    const remaining = Number(entry.batch_remaining || 0);
+    const token = String(entry.token || "");
+    const meta = batch > 1 ? `${escapeHtml(entry.created_label)} · item from a ${batch.toLocaleString()}-item batch` : escapeHtml(entry.created_label);
+    let batchBar = "";
+    if (entry.status === "moved" && remaining > 1 && !renderedBatches.has(token)) {
+      renderedBatches.add(token);
+      const disabled = entry.batch_undo_available ? "" : " disabled";
+      const title = entry.batch_undo_available ? "Restore every remaining item in this batch" : "One or more remaining files are unavailable";
+      batchBar = `<section class="history-batch-bar" aria-label="Batch actions"><span><strong>${remaining.toLocaleString()} items remaining</strong><small>These files were moved together.</small></span><button class="button history-undo-batch" type="button" data-token="${escapeHtml(token)}" title="${escapeHtml(title)}"${disabled}>↶ Undo all ${remaining.toLocaleString()}</button></section>`;
+    }
+    const rowAction = active
+      ? `<button class="button history-undo" type="button" data-entry-id="${escapeHtml(entry.entry_id)}">Undo</button>`
+      : `<span class="history-status">${status}</span>`;
+    return `${batchBar}<article class="history-item ${entry.status === "purged" ? "purged" : ""}"><span class="history-pill tone-${escapeHtml(entry.action_tone)}">${iconMarkup(entry.action_icon)}${escapeHtml(entry.action_label)}</span>${preview}<div class="history-paths"><h2 class="history-name">${escapeHtml(entry.name)}</h2><div class="history-route" title="${escapeHtml(entry.source)}">${escapeHtml(entry.source)} → ${escapeHtml(entry.destination)}</div><div class="history-meta">${meta}</div></div><div>${rowAction}</div><div class="history-expanded" id="${previewId}" hidden></div></article>`;
   }).join("");
 }
 
@@ -100,17 +113,19 @@ async function loadHistory() {
   catch (error) { list.innerHTML = `<div class="empty">${escapeHtml(error.message)}</div>`; }
 }
 
-async function undo(token = null) {
+async function undo(selection = {}) {
   try {
-    const result = await request("/api/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(token ? { token } : {}) });
+    const result = await request("/api/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection) });
     toast(`${result.name} restored`);
     await loadHistory();
   } catch (error) { toast(error.message, true); }
 }
 
 list.addEventListener("click", event => {
+  const batchButton = event.target.closest(".history-undo-batch");
+  if (batchButton) { undo({ token: batchButton.dataset.token }); return; }
   const undoButton = event.target.closest(".history-undo");
-  if (undoButton) { undo(undoButton.dataset.token); return; }
+  if (undoButton) { undo({ entry_id: undoButton.dataset.entryId }); return; }
   const closeButton = event.target.closest(".history-close");
   if (closeButton) { closePreview(true); return; }
   const previewButton = event.target.closest(".history-preview");

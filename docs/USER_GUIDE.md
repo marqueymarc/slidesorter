@@ -82,12 +82,14 @@ Undo:
 
 - restores the exact original path;
 - refuses to overwrite an occupied path;
-- restores a batch under one journal token;
+- restores one History item or every remaining item under one batch token;
 - requires the moved destination file to remain present.
 
 ## Use History
 
 History loads up to 500 current journal entries. Each entry retains the destination label and presentation used when the move occurred. Click an available thumbnail to expand a picture or play a video in place. Use the native video controls for seeking.
+
+Every undoable row has an Undo button that restores only that file. A multi-item move has one batch bar before its first remaining item; Undo all restores every remaining file in that batch. Undo latest batch at the top finds the newest fully restorable batch.
 
 Click the thumbnail again, click ×, or press Escape to close a preview. Use Open full size to create a separate media tab.
 

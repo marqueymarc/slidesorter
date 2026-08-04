@@ -79,7 +79,7 @@ Batch actions preflight every destination and detect flat-name collisions before
 
 ## Undo transaction
 
-Undo finds the newest active token or a requested token. It verifies every source and destination against recorded roots. It refuses missing destinations and occupied source paths. It restores batch entries in reverse order.
+Undo accepts an individual journal entry, a requested batch token, or the newest active token. It verifies every selected source and destination against recorded roots. It refuses missing destinations and occupied source paths. Batch restores run in reverse order; item Undo leaves the remaining token members available for a later Undo all.
 
 ## Selection model
 

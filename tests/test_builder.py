@@ -39,7 +39,7 @@ class BuilderTests(unittest.TestCase):
             self.assertTrue((state / "index.html").is_file())
             self.assertTrue((state / "history.js").is_file())
             index = (state / "index.html").read_text()
-            self.assertIn("/gallery/app.js?v=3.4.0", index)
+            self.assertIn("/gallery/app.js?v=3.5.0", index)
             self.assertFalse((media / "catalog.json").exists())
 
     def test_stage_and_remove_trees_are_excluded(self):

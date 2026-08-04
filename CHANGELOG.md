@@ -2,6 +2,18 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.5.0] - 2026-08-04
+
+### Added
+
+- Added per-item History Undo for files originally moved as part of a batch.
+- Added one batch bar with Undo all remaining instead of repeating a batch Undo button on every row.
+
+### Changed
+
+- Renamed the page action to Undo latest batch to make its scope explicit.
+- Opened card destination More menus below their buttons while retaining upward opening in the fixed bulk bar.
+
 ## [3.4.0] - 2026-08-04
 
 ### Added
@@ -98,3 +110,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 [3.3.1]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.1
 [3.3.2]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.2
 [3.4.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.4.0
+[3.5.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.5.0

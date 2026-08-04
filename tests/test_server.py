@@ -298,5 +298,90 @@ class HistoryReconciliationTests(unittest.TestCase):
             self.assertEqual(summary["available"], 1)
 
 
+class HistoryUndoTests(unittest.TestCase):
+    def make_handler(self, root: Path) -> GalleryHandler:
+        media = (root / "media").resolve()
+        removed = (root / "Removed").resolve()
+        state = (root / "state").resolve()
+        for directory in (media, removed, state):
+            directory.mkdir(parents=True, exist_ok=True)
+        entries: list[dict[str, object]] = []
+        for index, name in enumerate(("one.jpg", "two.jpg"), start=1):
+            destination = removed / name
+            destination.write_bytes(name.encode())
+            entries.append({
+                "entry_id": f"entry{index}",
+                "token": "batch1",
+                "batch_size": 2,
+                "status": "moved",
+                "name": name,
+                "source": str(media / name),
+                "destination": str(destination),
+                "media_root": str(media),
+                "action_root": str(removed),
+                "created_at": "2026-08-04T09:00:00+00:00",
+            })
+        (state / "action-history.json").write_text(json.dumps(entries))
+        config = GalleryConfig(
+            media_root=media,
+            gallery_root=state,
+            title="Fixture",
+            source_label="Fixture",
+            actions=(DestinationAction("remove", "Remove", removed),),
+            keep_structure=True,
+            history_retention_days=90,
+            media_mode="both",
+            thumbnail_width=720,
+            thumbnail_policy="lazy",
+            workers=1,
+        )
+        handler = object.__new__(GalleryHandler)
+        handler.server = SimpleNamespace(
+            gallery_config=config,
+            gallery_lock=threading.RLock(),
+            catalog={"items": []},
+        )
+        handler.run_rebuild = lambda _config: (True, "")
+        handler.reload_runtime = lambda: None
+        handler.respond_json = lambda _status, payload: setattr(handler, "response_payload", payload)
+        return handler
+
+    def test_history_payload_offers_item_and_single_batch_undo(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            handler = self.make_handler(Path(temporary))
+
+            payload = handler.history_payload()
+
+            self.assertTrue(payload["can_undo"])
+            self.assertEqual(len(payload["entries"]), 2)
+            self.assertTrue(all(entry["undo_available"] for entry in payload["entries"]))
+            self.assertTrue(all(entry["batch_undo_available"] for entry in payload["entries"]))
+            self.assertTrue(all(entry["batch_remaining"] == 2 for entry in payload["entries"]))
+
+    def test_item_undo_restores_only_selected_entry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            handler = self.make_handler(Path(temporary))
+
+            handler.undo_move({"entry_id": "entry1"})
+
+            history = json.loads(handler.config.history_path.read_text())
+            self.assertEqual([entry["status"] for entry in history], ["undone", "moved"])
+            self.assertTrue((handler.config.media_root / "one.jpg").is_file())
+            self.assertTrue((handler.config.actions[0].root / "two.jpg").is_file())
+            self.assertEqual(handler.response_payload["count"], 1)
+
+    def test_batch_undo_restores_every_remaining_entry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            handler = self.make_handler(Path(temporary))
+            handler.undo_move({"entry_id": "entry1"})
+
+            handler.undo_move({"token": "batch1"})
+
+            history = json.loads(handler.config.history_path.read_text())
+            self.assertEqual([entry["status"] for entry in history], ["undone", "undone"])
+            self.assertTrue((handler.config.media_root / "two.jpg").is_file())
+            self.assertEqual(handler.response_payload["count"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

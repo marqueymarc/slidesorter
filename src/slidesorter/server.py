@@ -689,16 +689,24 @@ class GalleryHandler(SimpleHTTPRequestHandler):
     def history_payload(self, limit: int = 200) -> dict[str, object]:
         all_history = read_history(self.config)
         undo_availability = history_undo_availability(all_history)
+        batch_remaining: dict[str, int] = {}
+        for entry in all_history:
+            if entry.get("status") == "moved":
+                token = str(entry.get("token", ""))
+                batch_remaining[token] = batch_remaining.get(token, 0) + 1
         history = list(reversed(all_history))
         history.sort(key=lambda entry: entry.get("status") == "purged")
         entries = history[:limit]
         public_entries = []
         for entry in entries:
             public = dict(entry)
-            undo_available = undo_availability.get(str(entry.get("token", "")), False)
+            token = str(entry.get("token", ""))
+            undo_available = history_entry_undo_available(entry)
             if entry.get("status") == "moved" and not undo_available:
                 public["status"] = "unavailable"
             public["undo_available"] = undo_available
+            public["batch_undo_available"] = undo_availability.get(token, False)
+            public["batch_remaining"] = batch_remaining.get(token, 0)
             public["media_available"] = existing_history_media(entry) is not None
             public["created_label"] = display_time(entry.get("created_at"))
             public["undone_label"] = display_time(entry.get("undone_at"))
@@ -1198,24 +1206,42 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         history = read_history(self.config)
         undo_availability = history_undo_availability(history)
         token = body.get("token")
-        latest = next(
-            (
-                candidate for candidate in reversed(history)
-                if (
-                    candidate.get("status") == "moved"
-                    and (token is None or candidate.get("token") == token)
-                    and undo_availability.get(str(candidate.get("token", "")), False)
-                )
-            ),
-            None,
-        )
+        entry_id = body.get("entry_id")
+        if token is not None and entry_id is not None:
+            raise ValueError("Choose either one item or the batch, not both")
+        if entry_id is not None:
+            if not isinstance(entry_id, str) or not entry_id or not entry_id.isalnum():
+                raise ValueError("Invalid History item")
+            latest = next(
+                (
+                    candidate for candidate in reversed(history)
+                    if candidate.get("entry_id") == entry_id
+                    and history_entry_undo_available(candidate)
+                ),
+                None,
+            )
+        else:
+            latest = next(
+                (
+                    candidate for candidate in reversed(history)
+                    if (
+                        candidate.get("status") == "moved"
+                        and (token is None or candidate.get("token") == token)
+                        and undo_availability.get(str(candidate.get("token", "")), False)
+                    )
+                ),
+                None,
+            )
         if latest is None:
             raise ValueError("There is no available move to undo")
-        selected_token = latest.get("token")
-        entries = [
-            entry for entry in history
-            if entry.get("status") == "moved" and entry.get("token") == selected_token
-        ]
+        if entry_id is not None:
+            entries = [latest]
+        else:
+            selected_token = latest.get("token")
+            entries = [
+                entry for entry in history
+                if entry.get("status") == "moved" and entry.get("token") == selected_token
+            ]
         prepared: list[tuple[Path, Path, dict[str, object]]] = []
         for entry in entries:
             source = Path(str(entry["source"])).resolve()
