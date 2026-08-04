@@ -35,10 +35,11 @@ class BuilderTests(unittest.TestCase):
             self.assertEqual({item["kind"] for item in catalog["items"]}, {"picture", "video"})
             self.assertEqual(config["media_root"], str(media.resolve()))
             self.assertEqual(config["gallery_root"], str(state.resolve()))
+            self.assertEqual(config["history_retention_days"], 90)
             self.assertTrue((state / "index.html").is_file())
             self.assertTrue((state / "history.js").is_file())
             index = (state / "index.html").read_text()
-            self.assertIn("/gallery/app.js?v=3.3.2", index)
+            self.assertIn("/gallery/app.js?v=3.4.0", index)
             self.assertFalse((media / "catalog.json").exists())
 
     def test_stage_and_remove_trees_are_excluded(self):
@@ -75,6 +76,10 @@ class BuilderTests(unittest.TestCase):
                     "--gallery-root", str(state),
                     "--actions-json", json.dumps(actions),
                     "--no-keep-structure",
+                    "--history-retention-days", "45",
+                    "--title", "Remembered Library",
+                    "--source-label", "Remembered Source",
+                    "--thumbnail-width", "640",
                 ]
             )
             builder.main(["--media-root", str(media), "--gallery-root", str(state)])
@@ -82,6 +87,10 @@ class BuilderTests(unittest.TestCase):
             config = json.loads((state / "gallery-config.json").read_text())
             self.assertEqual([action["id"] for action in config["actions"]], ["keep", "later", "remove"])
             self.assertFalse(config["keep_structure"])
+            self.assertEqual(config["history_retention_days"], 45)
+            self.assertEqual(config["title"], "Remembered Library")
+            self.assertEqual(config["source_label"], "Remembered Source")
+            self.assertEqual(config["thumbnail_width"], 640)
 
 
 if __name__ == "__main__":

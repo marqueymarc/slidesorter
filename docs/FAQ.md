@@ -47,3 +47,9 @@ Yes. Cross-disk moves may copy the entire file before removing the source.
 ## Can two users operate simultaneously?
 
 Avoid it. One server serializes actions, but two people can still make surprising workflow decisions. One state directory must have only one server process.
+
+## What happens after I empty Remove outside SlideSorter?
+
+The History page initially keeps the journal record, but Undo becomes unavailable as soon as the destination is gone. Use Settings → Rebuild History to mark it Purged. Purged entries appear at the bottom and expire under the remembered retention setting, which defaults to 90 days.
+
+Rebuild History deletes no media. It only updates and eventually prunes journal records whose files are already missing from both recorded paths.

@@ -534,6 +534,7 @@ async function openSettings() {
     document.querySelector("#gallery-title").value = config.title;
     document.querySelector("#source-label").value = config.source_label;
     document.querySelector("#page-capacity").value = String(state.pageSize);
+    document.querySelector("#history-retention-days").value = String(config.history_retention_days ?? 90);
     scrim.hidden = false;
     sheet.classList.add("open");
     sheet.setAttribute("aria-hidden", "false");
@@ -704,6 +705,33 @@ document.querySelector("#destination-add").addEventListener("click", () => {
   destinationList.insertAdjacentHTML("beforeend", destinationRowMarkup({ id: newActionId(), label: "Review later (blue clock icon)", root: "" }));
   refreshDestinationRows();
   destinationList.querySelector(".destination-row:last-child .destination-label").focus();
+});
+document.querySelector("#history-rebuild").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  const retention = Number.parseInt(document.querySelector("#history-retention-days").value, 10);
+  if (!Number.isInteger(retention) || retention < 0 || retention > 3650) {
+    toast("History retention must be between 0 and 3650 days", { error: true });
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Checking…";
+  try {
+    const result = await jsonRequest("/api/rebuild-history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ retention_days: retention }),
+    });
+    const details = [
+      `${Number(result.available || 0).toLocaleString()} available`,
+      `${Number(result.purged || 0).toLocaleString()} marked Purged`,
+    ];
+    if (result.restored) details.push(`${Number(result.restored).toLocaleString()} already restored`);
+    if (result.conflicts) details.push(`${Number(result.conflicts).toLocaleString()} conflicts`);
+    if (result.expired) details.push(`${Number(result.expired).toLocaleString()} expired records removed`);
+    toast(`History rebuilt · ${details.join(" · ")}`, { duration: 10000 });
+    await updateUndoState();
+  } catch (error) { toast(error.message, { error: true, duration: 12000 }); }
+  finally { button.disabled = false; button.textContent = "Rebuild History"; }
 });
 document.querySelector("#settings-form").addEventListener("submit", async event => {
   event.preventDefault();

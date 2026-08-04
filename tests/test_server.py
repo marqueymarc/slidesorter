@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 import tempfile
@@ -10,7 +11,9 @@ from slidesorter.server import (
     DIRECTORY_PROMPTS,
     GalleryConfig,
     GalleryHandler,
+    history_entry_undo_available,
     inside,
+    reconcile_history,
     safe_relative,
     validate_roots,
 )
@@ -73,6 +76,7 @@ class DestinationPathTests(unittest.TestCase):
         config = GalleryConfig(
             media_root=media.resolve(), gallery_root=state.resolve(), title="Fixture",
             source_label="Fixture", actions=(action,), keep_structure=keep_structure,
+            history_retention_days=90,
             media_mode="both", thumbnail_width=720, thumbnail_policy="lazy", workers=1,
         )
         handler = object.__new__(GalleryHandler)
@@ -113,6 +117,7 @@ class SettingsCompatibilityTests(unittest.TestCase):
             config = GalleryConfig(
                 media_root=media, gallery_root=state, title="Fixture",
                 source_label="Fixture", actions=actions, keep_structure=True,
+                history_retention_days=90,
                 media_mode="both", thumbnail_width=720, thumbnail_policy="lazy", workers=1,
             )
 
@@ -121,6 +126,7 @@ class SettingsCompatibilityTests(unittest.TestCase):
             self.assertEqual(settings["staged_root"], str(media / "Staged"))
             self.assertEqual(settings["removed_root"], str(media / "Removed"))
             self.assertEqual([action["display_label"] for action in settings["actions"]], ["Stage", "Remove"])
+            self.assertEqual(settings["history_retention_days"], 90)
 
 
 class HistoryMediaTests(unittest.TestCase):
@@ -157,6 +163,7 @@ class HistoryMediaTests(unittest.TestCase):
                     DestinationAction("remove", "Remove", removed.resolve()),
                 ),
                 keep_structure=True,
+                history_retention_days=90,
                 media_mode="both",
                 thumbnail_width=720,
                 thumbnail_policy="lazy",
@@ -185,6 +192,7 @@ class HistoryMediaTests(unittest.TestCase):
                     DestinationAction("remove", "Remove", removed.resolve()),
                 ),
                 keep_structure=True,
+                history_retention_days=90,
                 media_mode="both", thumbnail_width=720, thumbnail_policy="lazy", workers=1,
             )
             handler = object.__new__(GalleryHandler)
@@ -192,6 +200,102 @@ class HistoryMediaTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 handler.history_media_path("missing")
+
+
+class HistoryReconciliationTests(unittest.TestCase):
+    def entry(self, root: Path, name: str = "clip.mov", status: str = "moved") -> dict[str, object]:
+        media = (root / "media").resolve()
+        destination_root = (root / "Removed").resolve()
+        media.mkdir(exist_ok=True)
+        destination_root.mkdir(exist_ok=True)
+        return {
+            "entry_id": name,
+            "token": name,
+            "status": status,
+            "name": name,
+            "source": str(media / name),
+            "destination": str(destination_root / name),
+            "media_root": str(media),
+            "action_root": str(destination_root),
+            "created_at": "2026-01-01T00:00:00+00:00",
+        }
+
+    def test_available_move_stays_undoable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = self.entry(Path(temporary))
+            Path(str(entry["destination"])).write_bytes(b"video")
+
+            summary = reconcile_history([entry], 90)
+
+            self.assertEqual(entry["status"], "moved")
+            self.assertTrue(history_entry_undo_available(entry))
+            self.assertEqual(summary["available"], 1)
+
+    def test_missing_move_becomes_purged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = self.entry(Path(temporary))
+
+            summary = reconcile_history([entry], 90)
+
+            self.assertEqual(entry["status"], "purged")
+            self.assertIn("purged_at", entry)
+            self.assertEqual(summary["purged"], 1)
+            self.assertFalse(history_entry_undo_available(entry))
+
+    def test_external_restore_is_recorded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = self.entry(Path(temporary))
+            Path(str(entry["source"])).write_bytes(b"photo")
+
+            summary = reconcile_history([entry], 90)
+
+            self.assertEqual(entry["status"], "restored")
+            self.assertEqual(summary["restored"], 1)
+
+    def test_planned_move_that_never_started_is_failed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = self.entry(Path(temporary), status="planned")
+            Path(str(entry["source"])).write_bytes(b"photo")
+
+            summary = reconcile_history([entry], 90)
+
+            self.assertEqual(entry["status"], "failed")
+            self.assertEqual(summary["failed"], 1)
+
+    def test_expired_purged_record_is_pruned(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            now = datetime(2026, 8, 4, tzinfo=timezone.utc)
+            entry = self.entry(Path(temporary), status="purged")
+            entry["purged_at"] = (now - timedelta(days=91)).isoformat()
+            entries = [entry]
+
+            summary = reconcile_history(entries, 90, now)
+
+            self.assertEqual(entries, [])
+            self.assertEqual(summary["expired"], 1)
+
+    def test_unmounted_recorded_root_is_skipped_not_purged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = self.entry(Path(temporary))
+            Path(str(entry["action_root"])).rmdir()
+
+            summary = reconcile_history([entry], 90)
+
+            self.assertEqual(entry["status"], "moved")
+            self.assertEqual(summary["skipped"], 1)
+            self.assertEqual(summary["purged"], 0)
+
+    def test_purged_record_recovers_if_destination_reappears(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            entry = self.entry(Path(temporary), status="purged")
+            entry["purged_at"] = "2026-08-01T00:00:00+00:00"
+            Path(str(entry["destination"])).write_bytes(b"video")
+
+            summary = reconcile_history([entry], 90)
+
+            self.assertEqual(entry["status"], "moved")
+            self.assertNotIn("purged_at", entry)
+            self.assertEqual(summary["available"], 1)
 
 
 if __name__ == "__main__":

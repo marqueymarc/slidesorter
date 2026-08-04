@@ -26,6 +26,8 @@ Package installation and container pulls may contact their normal registries.
 
 `action-history.json` contains source paths, destination paths, timestamps, statuses, and recovery tokens. Preserve it while Undo matters.
 
+Settings → Rebuild History reads only the source and destination paths already recorded in this file. It marks entries Purged when neither path still contains the media. Purged records are deleted after the configured retention interval; active Undo records are not deleted by retention. The normal History Refresh view does not modify the journal.
+
 ## Stateless code distribution
 
 Git, wheels, source archives, and container images contain only application code and static interface assets. `.gitignore` excludes known runtime state names.

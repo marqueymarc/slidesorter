@@ -41,13 +41,14 @@ PICTURE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".tif", ".tiff", ".bmp"
 }
 ASSET_FILES = ("index.html", "app.css", "app.js", "viewer.html", "history.html", "history.js")
+DEFAULT_HISTORY_RETENTION_DAYS = 90
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--media-root", type=Path, required=True)
     parser.add_argument("--gallery-root", type=Path, default=DEFAULT_GALLERY_ROOT)
-    parser.add_argument("--title", default="Media Library")
+    parser.add_argument("--title")
     parser.add_argument("--source-label", help="Defaults to the media root directory name")
     parser.add_argument("--staged-name", default="Staged", help="Directory name under the media root")
     parser.add_argument("--removed-name", default="Removed", help="Directory name under the media root")
@@ -63,10 +64,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="Preserve each source-relative path beneath its destination",
     )
-    parser.add_argument("--media-mode", choices=("videos", "pictures", "both"), default="both")
-    parser.add_argument("--thumbnail-width", type=int, default=720)
-    parser.add_argument("--thumbnail-policy", choices=("lazy", "eager"), default="lazy")
-    parser.add_argument("--workers", type=int, default=4)
+    parser.add_argument("--media-mode", choices=("videos", "pictures", "both"))
+    parser.add_argument("--thumbnail-width", type=int)
+    parser.add_argument("--thumbnail-policy", choices=("lazy", "eager"))
+    parser.add_argument("--workers", type=int)
+    parser.add_argument(
+        "--history-retention-days",
+        type=int,
+        default=None,
+        help="Days to keep Purged history records after reconciliation",
+    )
     return parser.parse_args(argv)
 
 
@@ -203,15 +210,28 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     media_root = args.media_root.expanduser().resolve()
     gallery_root = args.gallery_root.expanduser().resolve()
-    source_label = args.source_label or media_root.name
-    remembered = remembered_config(gallery_root, media_root)
+    remembered = remembered_config(gallery_root, media_root) or {}
+    title = args.title or str(remembered.get("title", "Media Library"))
+    source_label = args.source_label or str(remembered.get("source_label", media_root.name))
+    media_mode = args.media_mode or str(remembered.get("media_mode", "both"))
+    thumbnail_width = args.thumbnail_width or int(remembered.get("thumbnail_width", 720))
+    thumbnail_policy = args.thumbnail_policy or str(remembered.get("thumbnail_policy", "lazy"))
+    workers = args.workers or int(remembered.get("workers", 4))
     actions = configured_actions(args, media_root, remembered)
     keep_structure = (
         bool(remembered.get("keep_structure", True))
         if args.keep_structure is None and remembered
         else args.keep_structure is not False
     )
-    if args.thumbnail_width < 160 or args.thumbnail_width > 2400:
+    history_retention_days = (
+        int(remembered.get("history_retention_days", DEFAULT_HISTORY_RETENTION_DAYS))
+        if args.history_retention_days is None and remembered
+        else DEFAULT_HISTORY_RETENTION_DAYS if args.history_retention_days is None
+        else args.history_retention_days
+    )
+    if history_retention_days < 0 or history_retention_days > 3650:
+        raise SystemExit("History retention must be between 0 and 3650 days")
+    if thumbnail_width < 160 or thumbnail_width > 2400:
         raise SystemExit("Thumbnail width must be between 160 and 2400 pixels")
     for asset in ASSET_FILES:
         if not (ASSET_ROOT / asset).is_file():
@@ -221,19 +241,19 @@ def main(argv: list[str] | None = None) -> None:
     thumbs = gallery_root / "thumbs"
     thumbs.mkdir(exist_ok=True)
     excluded = tuple(action.root for action in actions if action.root.is_relative_to(media_root))
-    media_files = discover_media(media_root, excluded, selected_extensions(args.media_mode))
+    media_files = discover_media(media_root, excluded, selected_extensions(media_mode))
 
     results: dict[Path, tuple[Path, str | None]] = {
-        media: (thumbnail_path_for(media, thumbs, args.thumbnail_width), None) for media in media_files
+        media: (thumbnail_path_for(media, thumbs, thumbnail_width), None) for media in media_files
     }
-    if args.thumbnail_policy == "eager":
-        with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
+    if thumbnail_policy == "eager":
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             futures = {
                 pool.submit(
                     thumbnail_for,
                     media,
                     thumbs,
-                    args.thumbnail_width,
+                    thumbnail_width,
                     "video" if media.suffix.lower() in VIDEO_EXTENSIONS else "picture",
                 ): media
                 for media in media_files
@@ -275,26 +295,27 @@ def main(argv: list[str] | None = None) -> None:
 
     generated_at = datetime.now().astimezone().isoformat()
     catalog = {
-        "version": 4,
+        "version": 5,
         "generated_at": generated_at,
-        "title": args.title,
+        "title": title,
         "source_label": source_label,
-        "media_mode": args.media_mode,
+        "media_mode": media_mode,
         "actions": [action.public_dict() for action in actions],
         "items": items,
     }
     config = {
-        "version": 4,
+        "version": 5,
         "media_root": str(media_root),
         "gallery_root": str(gallery_root),
-        "title": args.title,
+        "title": title,
         "source_label": source_label,
         "actions": [action.config_dict() for action in actions],
         "keep_structure": keep_structure,
-        "media_mode": args.media_mode,
-        "thumbnail_width": args.thumbnail_width,
-        "thumbnail_policy": args.thumbnail_policy,
-        "workers": max(1, args.workers),
+        "history_retention_days": history_retention_days,
+        "media_mode": media_mode,
+        "thumbnail_width": thumbnail_width,
+        "thumbnail_policy": thumbnail_policy,
+        "workers": max(1, workers),
     }
     counts = {
         "pictures": sum(item["kind"] == "picture" for item in items),
@@ -311,7 +332,7 @@ def main(argv: list[str] | None = None) -> None:
                 "created_at": generated_at,
                 "items": len(items),
                 **counts,
-                "thumbnail_policy": args.thumbnail_policy,
+                "thumbnail_policy": thumbnail_policy,
                 "thumbnails_ready": sum(thumb.exists() for thumb, _ in results.values()),
                 "thumbnail_failures": sum(bool(item["thumbnail_problem"]) for item in items),
             },

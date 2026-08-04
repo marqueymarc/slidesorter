@@ -69,17 +69,29 @@ function render(result) {
     return;
   }
   list.innerHTML = result.entries.map(entry => {
-    const active = entry.status === "moved";
-    const status = entry.status === "undone" ? `Undone ${escapeHtml(entry.undone_label || "")}` : active ? "Ready to undo" : escapeHtml(entry.status);
+    const active = entry.undo_available === true;
+    const statusLabels = {
+      moved: "Ready to undo",
+      unavailable: "Unavailable · rebuild to reconcile",
+      undone: `Undone ${entry.undone_label || ""}`,
+      purged: "Purged",
+      restored: "Restored outside SlideSorter",
+      conflict: "Source and destination both exist",
+      failed: "Move did not complete",
+      planned: "Move pending",
+    };
+    const status = escapeHtml(statusLabels[entry.status] || entry.status);
     const previewId = `history-preview-${escapeHtml(entry.entry_id)}`;
     const thumbnail = entry.thumbnail_url
       ? `<img class="history-thumb" src="${escapeHtml(entry.thumbnail_url)}" alt="" loading="lazy">`
       : `<span class="history-thumb history-thumb-empty"></span>`;
     const previewLabel = entry.kind === "video" ? `Play ${entry.name} here` : `Expand ${entry.name}`;
-    const preview = `<button class="history-preview" type="button" data-media="${escapeHtml(entry.media_url)}" data-kind="${escapeHtml(entry.kind)}" data-name="${escapeHtml(entry.name)}" aria-label="${escapeHtml(previewLabel)}" aria-controls="${previewId}" aria-expanded="false">${thumbnail}<span class="history-preview-action" aria-hidden="true">${entry.kind === "video" ? "▶" : "↗"}</span></button>`;
+    const preview = entry.media_available
+      ? `<button class="history-preview" type="button" data-media="${escapeHtml(entry.media_url)}" data-kind="${escapeHtml(entry.kind)}" data-name="${escapeHtml(entry.name)}" aria-label="${escapeHtml(previewLabel)}" aria-controls="${previewId}" aria-expanded="false">${thumbnail}<span class="history-preview-action" aria-hidden="true">${entry.kind === "video" ? "▶" : "↗"}</span></button>`
+      : `<span class="history-preview history-preview-unavailable" aria-label="Media unavailable">${thumbnail}<span class="history-preview-missing" aria-hidden="true">—</span></span>`;
     const batch = Number(entry.batch_size || 1);
     const meta = batch > 1 ? `${escapeHtml(entry.created_label)} · ${batch.toLocaleString()}-item batch` : escapeHtml(entry.created_label);
-    return `<article class="history-item"><span class="history-pill tone-${escapeHtml(entry.action_tone)}">${iconMarkup(entry.action_icon)}${escapeHtml(entry.action_label)}</span>${preview}<div class="history-paths"><h2 class="history-name">${escapeHtml(entry.name)}</h2><div class="history-route" title="${escapeHtml(entry.source)}">${escapeHtml(entry.source)} → ${escapeHtml(entry.destination)}</div><div class="history-meta">${meta}</div></div><div>${active ? `<button class="button history-undo" type="button" data-token="${escapeHtml(entry.token)}">${batch > 1 ? "Undo batch" : "Undo"}</button>` : `<span class="history-status">${status}</span>`}</div><div class="history-expanded" id="${previewId}" hidden></div></article>`;
+    return `<article class="history-item ${entry.status === "purged" ? "purged" : ""}"><span class="history-pill tone-${escapeHtml(entry.action_tone)}">${iconMarkup(entry.action_icon)}${escapeHtml(entry.action_label)}</span>${preview}<div class="history-paths"><h2 class="history-name">${escapeHtml(entry.name)}</h2><div class="history-route" title="${escapeHtml(entry.source)}">${escapeHtml(entry.source)} → ${escapeHtml(entry.destination)}</div><div class="history-meta">${meta}</div></div><div>${active ? `<button class="button history-undo" type="button" data-token="${escapeHtml(entry.token)}">${batch > 1 ? "Undo batch" : "Undo"}</button>` : `<span class="history-status">${status}</span>`}</div><div class="history-expanded" id="${previewId}" hidden></div></article>`;
   }).join("");
 }
 

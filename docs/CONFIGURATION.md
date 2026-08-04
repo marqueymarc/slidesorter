@@ -27,6 +27,7 @@ slidesorter run MEDIA_ROOT [options]
 | `--removed-root` | `MEDIA_ROOT/Removed` | Recoverable removal destination |
 | `--keep-structure` | enabled | Preserve source-relative paths at destinations |
 | `--no-keep-structure` | — | Move files directly into destination folders |
+| `--history-retention-days` | `90` | Days to retain records after they become Purged (`0` removes them immediately) |
 | `--media-mode` | `both` | `pictures`, `videos`, or `both` |
 | `--thumbnail-width` | `720` | Thumbnail pixel width |
 | `--thumbnail-policy` | `lazy` | Generate on demand or eagerly |
@@ -57,6 +58,20 @@ The default config is the platform default state path.
 The browser Settings panel stores an ordered `actions` list in `gallery-config.json`. Each entry has a stable id, a raw label, and an absolute destination root. The first two actions are direct buttons; later actions appear under More.
 
 The builder preserves actions and the directory-structure setting when the same state directory is rebuilt or started again. Existing Stage and Remove configuration migrates automatically.
+
+The History retention setting is also preserved. Changing it through Settings → Rebuild History updates `gallery-config.json` without rescanning the media catalog.
+
+## History reconciliation
+
+Rebuild History checks the source and destination paths recorded for each active move:
+
+- destination present and source absent: still available for Undo;
+- destination absent and source present: restored outside SlideSorter;
+- both paths absent: Purged and no longer undoable;
+- both paths present: conflict, so SlideSorter will not offer Undo;
+- unsafe or malformed journal paths: skipped without filesystem access.
+
+Purged entries are retained for `history_retention_days`, shown after active and completed entries, and automatically pruned on later journal writes or History rebuilds. Active `planned` and `moved` records are always retained.
 
 Labels may end with a recognized presentation hint, for example `Remove (use a red trash can glyph)`. This is deterministic local parsing, not an LLM call. Unknown parentheticals remain part of the visible label.
 

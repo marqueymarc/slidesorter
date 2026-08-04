@@ -4,8 +4,8 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, replace
+from datetime import datetime, timedelta
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -26,7 +26,7 @@ from .actions import (
     legacy_actions,
     validate_actions,
 )
-from .builder import DEFAULT_GALLERY_ROOT, thumbnail_for
+from .builder import DEFAULT_GALLERY_ROOT, DEFAULT_HISTORY_RETENTION_DAYS, thumbnail_for
 
 
 DEFAULT_CONFIG = DEFAULT_GALLERY_ROOT / "gallery-config.json"
@@ -68,6 +68,7 @@ class GalleryConfig:
     source_label: str
     actions: tuple[DestinationAction, ...]
     keep_structure: bool
+    history_retention_days: int
     media_mode: str
     thumbnail_width: int
     thumbnail_policy: str
@@ -102,6 +103,11 @@ class GalleryConfig:
             raise SystemExit(f"Unsupported thumbnail policy in config: {thumbnail_policy}")
         if not gallery_root.is_dir():
             raise SystemExit(f"Gallery root is not a directory: {gallery_root}")
+        history_retention_days = int(
+            raw.get("history_retention_days", DEFAULT_HISTORY_RETENTION_DAYS)
+        )
+        if history_retention_days < 0 or history_retention_days > 3650:
+            raise SystemExit("History retention must be between 0 and 3650 days")
         return cls(
             media_root=media_root,
             gallery_root=gallery_root,
@@ -109,6 +115,7 @@ class GalleryConfig:
             source_label=str(raw.get("source_label", media_root.name)),
             actions=actions,
             keep_structure=bool(raw.get("keep_structure", True)),
+            history_retention_days=history_retention_days,
             media_mode=mode,
             thumbnail_width=int(raw.get("thumbnail_width", 720)),
             thumbnail_policy=thumbnail_policy,
@@ -129,6 +136,14 @@ class GalleryConfig:
         keep_structure = raw.get("keep_structure", True)
         if not isinstance(keep_structure, bool):
             raise ValueError("Keep directory structure must be on or off")
+        try:
+            history_retention_days = int(
+                raw.get("history_retention_days", current.history_retention_days)
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError("History retention must be a whole number of days") from error
+        if history_retention_days < 0 or history_retention_days > 3650:
+            raise ValueError("History retention must be between 0 and 3650 days")
         return cls(
             media_root=media_root,
             gallery_root=current.gallery_root,
@@ -136,6 +151,7 @@ class GalleryConfig:
             source_label=source_label,
             actions=actions,
             keep_structure=keep_structure,
+            history_retention_days=history_retention_days,
             media_mode=mode,
             thumbnail_width=current.thumbnail_width,
             thumbnail_policy=current.thumbnail_policy,
@@ -181,6 +197,7 @@ class GalleryConfig:
             "staged_root": str(legacy_stage.root),
             "removed_root": str(legacy_remove.root),
             "keep_structure": self.keep_structure,
+            "history_retention_days": self.history_retention_days,
             "media_mode": self.media_mode,
             "title": self.title,
             "source_label": self.source_label,
@@ -195,6 +212,7 @@ class GalleryConfig:
             "--source-label", self.source_label,
             "--actions-json", json.dumps([action.config_dict() for action in self.actions]),
             "--keep-structure" if self.keep_structure else "--no-keep-structure",
+            "--history-retention-days", str(self.history_retention_days),
             "--media-mode", self.media_mode,
             "--thumbnail-width", str(self.thumbnail_width),
             "--thumbnail-policy", self.thumbnail_policy,
@@ -239,34 +257,181 @@ def read_history(config: GalleryConfig) -> list[dict[str, object]]:
     return [entry for entry in payload if isinstance(entry, dict)]
 
 
-def write_history(config: GalleryConfig, entries: list[dict[str, object]]) -> None:
+def parsed_history_time(value: object) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed.tzinfo else parsed.astimezone()
+
+
+def purged_is_expired(
+    entry: dict[str, object],
+    retention_days: int,
+    now: datetime,
+) -> bool:
+    if entry.get("status") != "purged":
+        return False
+    purged_at = parsed_history_time(entry.get("purged_at"))
+    return purged_at is not None and purged_at <= now - timedelta(days=retention_days)
+
+
+def write_history(
+    config: GalleryConfig,
+    entries: list[dict[str, object]],
+    retention_days: int | None = None,
+) -> None:
     temporary = config.history_path.with_suffix(".json.tmp")
     cutoff = max(0, len(entries) - 500)
+    now = datetime.now().astimezone()
+    retention = config.history_retention_days if retention_days is None else retention_days
     retained = [
         entry for index, entry in enumerate(entries)
-        if index >= cutoff or entry.get("status") in {"planned", "moved"}
+        if (
+            not purged_is_expired(entry, retention, now)
+            and (
+                entry.get("status") == "purged"
+                or index >= cutoff
+                or entry.get("status") in {"planned", "moved"}
+            )
+        )
     ]
     temporary.write_text(json.dumps(retained, indent=2) + "\n", encoding="utf-8")
     temporary.replace(config.history_path)
 
 
-def existing_history_media(entry: dict[str, object]) -> Path | None:
-    roots_and_values = (
-        (entry.get("media_root"), entry.get("source")),
-        (entry.get("action_root"), entry.get("destination")),
-    )
-    for root_value, path_value in roots_and_values:
-        if not root_value or not path_value:
-            continue
+def journaled_media_path(
+    entry: dict[str, object],
+    root_field: str,
+    path_field: str,
+) -> Path | None:
+    root_value = entry.get(root_field)
+    path_value = entry.get(path_field)
+    if not root_value or not path_value:
+        return None
+    try:
         root = Path(str(root_value)).resolve()
         candidate = Path(str(path_value)).resolve()
-        if (
-            candidate.suffix.lower() in MEDIA_EXTENSIONS
-            and candidate.is_file()
-            and candidate.is_relative_to(root)
-        ):
+    except (OSError, RuntimeError):
+        return None
+    if candidate.suffix.lower() in MEDIA_EXTENSIONS and candidate.is_relative_to(root):
+        return candidate
+    return None
+
+
+def journaled_root(entry: dict[str, object], root_field: str) -> Path | None:
+    value = entry.get(root_field)
+    if not value:
+        return None
+    try:
+        return Path(str(value)).resolve()
+    except (OSError, RuntimeError):
+        return None
+
+
+def existing_history_media(entry: dict[str, object]) -> Path | None:
+    for root_field, path_field in (
+        ("media_root", "source"),
+        ("action_root", "destination"),
+    ):
+        candidate = journaled_media_path(entry, root_field, path_field)
+        if candidate is not None and candidate.is_file():
             return candidate
     return None
+
+
+def history_entry_undo_available(entry: dict[str, object]) -> bool:
+    if entry.get("status") != "moved":
+        return False
+    source = journaled_media_path(entry, "media_root", "source")
+    destination = journaled_media_path(entry, "action_root", "destination")
+    return bool(
+        source is not None
+        and destination is not None
+        and destination.is_file()
+        and not source.exists()
+    )
+
+
+def history_undo_availability(entries: list[dict[str, object]]) -> dict[str, bool]:
+    availability: dict[str, bool] = {}
+    for entry in entries:
+        if entry.get("status") != "moved":
+            continue
+        token = str(entry.get("token", ""))
+        availability[token] = (
+            availability.get(token, True)
+            and history_entry_undo_available(entry)
+        )
+    return availability
+
+
+def reconcile_history(
+    entries: list[dict[str, object]],
+    retention_days: int,
+    now: datetime | None = None,
+) -> dict[str, int]:
+    moment = now or datetime.now().astimezone()
+    summary = {
+        "checked": 0,
+        "available": 0,
+        "purged": 0,
+        "restored": 0,
+        "failed": 0,
+        "conflicts": 0,
+        "skipped": 0,
+        "expired": 0,
+    }
+    for entry in entries:
+        original_status = entry.get("status")
+        if original_status not in {"planned", "moved", "purged"}:
+            continue
+        media_root = journaled_root(entry, "media_root")
+        action_root = journaled_root(entry, "action_root")
+        if (
+            media_root is None
+            or action_root is None
+            or not media_root.is_dir()
+            or not action_root.is_dir()
+        ):
+            summary["skipped"] += 1
+            continue
+        source = journaled_media_path(entry, "media_root", "source")
+        destination = journaled_media_path(entry, "action_root", "destination")
+        if source is None or destination is None:
+            summary["skipped"] += 1
+            continue
+        summary["checked"] += 1
+        source_exists = source.exists()
+        destination_exists = destination.is_file()
+        if destination_exists and not source_exists:
+            entry["status"] = "moved"
+            entry.pop("purged_at", None)
+            summary["available"] += 1
+        elif source_exists and not destination_exists:
+            entry["status"] = "failed" if original_status == "planned" else "restored"
+            entry.pop("purged_at", None)
+            entry["reconciled_at"] = moment.isoformat()
+            summary["failed" if entry["status"] == "failed" else "restored"] += 1
+        elif not source_exists and not destination_exists:
+            entry["status"] = "purged"
+            if original_status != "purged":
+                entry["purged_at"] = moment.isoformat()
+                summary["purged"] += 1
+        else:
+            entry["status"] = "conflict"
+            entry["reconciled_at"] = moment.isoformat()
+            summary["conflicts"] += 1
+
+    retained: list[dict[str, object]] = []
+    for entry in entries:
+        if purged_is_expired(entry, retention_days, moment):
+            summary["expired"] += 1
+        else:
+            retained.append(entry)
+    entries[:] = retained
+    summary["remaining"] = len(entries)
+    return summary
 
 
 def load_catalog(config: GalleryConfig) -> dict[str, object]:
@@ -522,10 +687,19 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         self.server.catalog = catalog  # type: ignore[attr-defined]
 
     def history_payload(self, limit: int = 200) -> dict[str, object]:
-        entries = list(reversed(read_history(self.config)))[:limit]
+        all_history = read_history(self.config)
+        undo_availability = history_undo_availability(all_history)
+        history = list(reversed(all_history))
+        history.sort(key=lambda entry: entry.get("status") == "purged")
+        entries = history[:limit]
         public_entries = []
         for entry in entries:
             public = dict(entry)
+            undo_available = undo_availability.get(str(entry.get("token", "")), False)
+            if entry.get("status") == "moved" and not undo_available:
+                public["status"] = "unavailable"
+            public["undo_available"] = undo_available
+            public["media_available"] = existing_history_media(entry) is not None
             public["created_label"] = display_time(entry.get("created_at"))
             public["undone_label"] = display_time(entry.get("undone_at"))
             public["kind"] = "video" if Path(str(entry.get("name", ""))).suffix.lower() in VIDEO_EXTENSIONS else "picture"
@@ -539,7 +713,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             public_entries.append(public)
         return {
             "entries": public_entries,
-            "can_undo": any(entry.get("status") == "moved" for entry in read_history(self.config)),
+            "can_undo": any(undo_availability.values()),
         }
 
     def history_media_path(self, entry_id: str) -> Path:
@@ -700,7 +874,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         allowed = {
             "/api/reveal", "/api/move", "/api/bulk-move", "/api/refresh",
             "/api/remove", "/api/stage", "/api/bulk-stage", "/api/bulk-remove",
-            "/api/settings", "/api/undo", "/api/choose-directory",
+            "/api/settings", "/api/undo", "/api/choose-directory", "/api/rebuild-history",
             "/api/catalog-range",
         }
         if action not in allowed:
@@ -721,6 +895,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             with self.gallery_lock:
                 if action == "/api/settings":
                     self.save_settings(self.read_json_body())
+                elif action == "/api/rebuild-history":
+                    self.rebuild_history(self.read_json_body(allow_empty=True))
                 elif action == "/api/refresh":
                     self.refresh_gallery()
                 elif action == "/api/undo":
@@ -778,6 +954,32 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             raise RuntimeError(detail or "The catalog rebuild failed; settings were not changed")
         self.reload_runtime()
         self.respond_json(HTTPStatus.OK, self.config.public_settings())
+
+    def rebuild_history(self, body: dict[str, object]) -> None:
+        raw_retention = body.get("retention_days", self.config.history_retention_days)
+        try:
+            retention_days = int(raw_retention)
+        except (TypeError, ValueError) as error:
+            raise ValueError("History retention must be a whole number of days") from error
+        if retention_days < 0 or retention_days > 3650:
+            raise ValueError("History retention must be between 0 and 3650 days")
+        if retention_days != self.config.history_retention_days:
+            raw_config = json.loads(self.config_path.read_text(encoding="utf-8"))
+            if not isinstance(raw_config, dict):
+                raise RuntimeError("The gallery config has an invalid format")
+            raw_config["history_retention_days"] = retention_days
+            temporary = self.config_path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(raw_config, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(self.config_path)
+            self.server.gallery_config = replace(  # type: ignore[attr-defined]
+                self.config,
+                history_retention_days=retention_days,
+            )
+        history = read_history(self.config)
+        summary = reconcile_history(history, retention_days)
+        write_history(self.config, history, retention_days)
+        summary["retention_days"] = retention_days
+        self.respond_json(HTTPStatus.OK, summary)
 
     def refresh_gallery(self) -> None:
         succeeded, detail = self.run_rebuild(self.config)
@@ -994,11 +1196,16 @@ class GalleryHandler(SimpleHTTPRequestHandler):
 
     def undo_move(self, body: dict[str, object]) -> None:
         history = read_history(self.config)
+        undo_availability = history_undo_availability(history)
         token = body.get("token")
         latest = next(
             (
                 candidate for candidate in reversed(history)
-                if candidate.get("status") == "moved" and (token is None or candidate.get("token") == token)
+                if (
+                    candidate.get("status") == "moved"
+                    and (token is None or candidate.get("token") == token)
+                    and undo_availability.get(str(candidate.get("token", "")), False)
+                )
             ),
             None,
         )

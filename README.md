@@ -26,6 +26,8 @@ Your media stays on your machine. The GitHub repository and container image cont
 - Preserve relative directory paths during every move.
 - Undo single and batch moves from the History journal.
 - Preview moved pictures and videos directly in History.
+- Reconcile History with files moved or deleted outside SlideSorter.
+- Keep Purged records at the bottom, then expire them under a remembered retention policy.
 - Reveal original files in Finder, Explorer, or a Linux file manager.
 - Keep source code separate from all generated runtime state.
 - Use Tailscale Serve for private remote access.
@@ -72,7 +74,7 @@ sudo apt-get install ffmpeg
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.3.2-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.4.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -171,7 +173,7 @@ SlideSorter keeps code and state separate.
 | `action-history.json` | Move and Undo journal | No |
 | Source package | Application code and static assets | Yes |
 
-Delete the state directory to discard the catalog and cache. Preserve `action-history.json` while you still need Undo.
+Delete the state directory to discard the catalog and cache. Preserve `action-history.json` while you still need Undo. Settings → Rebuild History checks recorded paths, marks missing media Purged, and prunes Purged records older than the configured retention period (90 days by default). Active Undo records are never age-pruned.
 
 Read [State and privacy](docs/STATE_AND_PRIVACY.md) before automating cleanup.
 
@@ -196,7 +198,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.3.2
+  ghcr.io/marqueymarc/slidesorter:3.4.0
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.

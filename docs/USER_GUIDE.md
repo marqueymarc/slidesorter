@@ -87,9 +87,13 @@ Undo:
 
 ## Use History
 
-History loads the most recent 500 journal entries. Each entry retains the destination label and presentation used when the move occurred. Click a thumbnail to expand a picture or play a video in place. Use the native video controls for seeking.
+History loads up to 500 current journal entries. Each entry retains the destination label and presentation used when the move occurred. Click an available thumbnail to expand a picture or play a video in place. Use the native video controls for seeking.
 
 Click the thumbnail again, click ×, or press Escape to close a preview. Use Open full size to create a separate media tab.
+
+Refresh view only rereads the journal. If you later empty Remove, relocate files with Finder, or otherwise change moved media outside SlideSorter, open Settings and choose Rebuild History. SlideSorter then checks every active journal record, removes Undo from unavailable moves, and marks files missing at both recorded paths as Purged. Purged records are grouped at the bottom.
+
+The adjacent retention setting controls how long Purged records remain. It defaults to 90 days and is remembered across restarts. A value of 0 removes Purged records immediately. Rebuild History never age-prunes a move that is still available for Undo.
 
 ## Refresh after external changes
 
@@ -106,6 +110,7 @@ Settings can change:
 - collection title;
 - source label;
 - page capacity.
+- Purged-history retention.
 
 Saving filesystem settings rebuilds the catalog.
 

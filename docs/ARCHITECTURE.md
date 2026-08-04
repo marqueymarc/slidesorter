@@ -91,6 +91,12 @@ Shift ranges use a read-only endpoint that resolves anchor and target positions 
 
 History media uses journal entry IDs, not arbitrary paths. The server resolves only an existing recorded source or destination beneath the roots snapshotted in that journal entry. This remains safe and usable if a destination is later renamed or removed from Settings. Videos use the same byte-range implementation as gallery playback.
 
+## History reconciliation and retention
+
+`POST /api/rebuild-history` performs an explicit reconciliation under the gallery lock. It resolves journaled paths only beneath their snapshotted media and destination roots, then classifies each active record as moved, restored, purged, conflict, failed, or skipped. It never moves or deletes media.
+
+Purged records carry a `purged_at` timestamp. The configured retention period is persisted in `gallery-config.json`; expired Purged records are removed during reconciliation and later atomic journal writes. Stable sorting keeps Purged records below every other status in the History response. Batch Undo remains available only when every moved member of the token is present and every original path is free.
+
 ## Concurrency model
 
 Python’s `ThreadingHTTPServer` handles static and media requests concurrently. One reentrant lock serializes settings, moves, Undo, and rebuild operations. A separate thumbnail lock prevents duplicate poster generation.

@@ -2,6 +2,26 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.4.0] - 2026-08-04
+
+### Added
+
+- Added Settings → Rebuild History to reconcile journal records with current filesystem availability.
+- Added a remembered Purged-record retention setting, defaulting to 90 days.
+- Added explicit Purged, restored-outside-SlideSorter, conflict, and unavailable states.
+
+### Changed
+
+- Kept Purged records in a subdued group below all other History entries.
+- Made ordinary History Refresh a read-only view refresh.
+- Removed Undo and live preview affordances when their recorded media is unavailable.
+- Required every member of a batch to remain safely restorable before offering batch Undo.
+
+### Safety
+
+- Reconciliation validates every journaled path against its snapshotted root and never moves or deletes media.
+- Active Undo records are exempt from age-based retention pruning.
+
 ## [3.3.2] - 2026-08-04
 
 ### Fixed
@@ -77,3 +97,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 [3.3.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.0
 [3.3.1]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.1
 [3.3.2]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.2
+[3.4.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.4.0

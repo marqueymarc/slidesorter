@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>SlideSorter</title>
-  <link rel="stylesheet" href="/gallery/app.css?v=3.3.2">
+  <link rel="stylesheet" href="/gallery/app.css?v=3.4.0">
 </head>
 <body>
   <div class="shell">
@@ -40,7 +40,7 @@
     </nav>
   </div>
 
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.3.2</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.4.0</footer>
 
   <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div><strong id="bulk-count">0 selected</strong><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></div><div class="bulk-actions" id="bulk-actions"></div></aside>
 
@@ -58,12 +58,17 @@
       <label class="field"><span>Include</span><small>Choose what the catalog scans.</small><select id="media-mode" name="media_mode"><option value="both">Pictures and videos</option><option value="pictures">Pictures only</option><option value="videos">Videos only</option></select></label>
       <label class="field"><span>Items per page</span><small>Use 100 for a responsive starting point; increase it on a faster Mac.</small><input id="page-capacity" name="page_capacity" type="number" min="25" max="500" step="25" value="100" required></label>
       <details class="advanced"><summary>Display details</summary><label class="field"><span>Collection title</span><input id="gallery-title" name="title" required></label><label class="field"><span>Source label</span><input id="source-label" name="source_label" required></label></details>
+      <section class="history-maintenance" aria-labelledby="history-maintenance-title">
+        <div class="history-maintenance-heading"><div><h3 id="history-maintenance-title">History maintenance</h3><p>Check recorded moves against the files currently on disk.</p></div><button class="button quiet" id="history-rebuild" type="button">Rebuild History</button></div>
+        <label class="compact-field history-retention"><span>Keep Purged records for</span><span class="retention-control"><input id="history-retention-days" name="history_retention_days" type="number" min="0" max="3650" step="1" value="90" required><span>days</span></span></label>
+        <p class="history-maintenance-note">Missing moved files become Purged and lose Undo. Purged records older than this limit are removed. Available, undoable moves are never pruned.</p>
+      </section>
       <p class="settings-note">Destinations may be on other disks. Cross-disk moves can take longer, but remain undoable while the destination file is present. Nothing is overwritten.</p>
       <div class="sheet-actions"><button class="button quiet" id="settings-cancel" type="button">Cancel</button><button class="button primary" id="settings-save" type="submit">Save & rebuild</button></div>
     </form>
   </aside>
 
   <div class="toast-region" id="toasts" aria-live="polite"></div>
-  <script src="/gallery/app.js?v=3.3.2" defer></script>
+  <script src="/gallery/app.js?v=3.4.0" defer></script>
 </body>
 </html>
