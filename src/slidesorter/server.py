@@ -161,9 +161,19 @@ class GalleryConfig:
         return action
 
     def public_settings(self) -> dict[str, object]:
+        legacy_stage = next(
+            (action for action in self.actions if action.id == "stage"),
+            self.actions[0],
+        )
+        legacy_remove = next(
+            (action for action in self.actions if action.id == "remove"),
+            self.actions[min(1, len(self.actions) - 1)],
+        )
         return {
             "media_root": str(self.media_root),
             "actions": [action.public_dict() for action in self.actions],
+            "staged_root": str(legacy_stage.root),
+            "removed_root": str(legacy_remove.root),
             "keep_structure": self.keep_structure,
             "media_mode": self.media_mode,
             "title": self.title,
@@ -417,6 +427,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             self.send_header("Accept-Ranges", "bytes")
         if path.name in {"catalog.json", "gallery-config.json", "manifest.json", "action-history.json"}:
             self.send_header("Cache-Control", "no-store")
+        elif path.parent == self.config.gallery_root and path.name in PUBLIC_GALLERY_FILES:
+            self.send_header("Cache-Control", "no-cache")
         elif path.parent.name == "thumbs" and path.suffix.lower() == ".jpg":
             self.send_header("Cache-Control", "public, max-age=31536000, immutable")
         self.end_headers()

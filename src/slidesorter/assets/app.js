@@ -499,6 +499,23 @@ function renderDestinationEditor(actions) {
   refreshDestinationRows();
 }
 
+function configuredDestinations(config) {
+  if (Array.isArray(config.actions) && config.actions.length) return config.actions;
+  const mediaRoot = String(config.media_root || "").replace(/\/+$/, "");
+  return [
+    {
+      id: "stage",
+      label: "Stage",
+      root: config.staged_root || `${mediaRoot}/Staged`,
+    },
+    {
+      id: "remove",
+      label: "Remove (use a red trash can glyph)",
+      root: config.removed_root || `${mediaRoot}/Removed`,
+    },
+  ];
+}
+
 function collectDestinationActions() {
   return [...destinationList.querySelectorAll(".destination-row")].map(row => ({
     id: row.dataset.actionId,
@@ -511,7 +528,7 @@ async function openSettings() {
   try {
     const config = await jsonRequest("/api/settings");
     document.querySelector("#media-root").value = config.media_root;
-    renderDestinationEditor(config.actions);
+    renderDestinationEditor(configuredDestinations(config));
     document.querySelector("#keep-structure").checked = config.keep_structure !== false;
     document.querySelector("#media-mode").value = config.media_mode;
     document.querySelector("#gallery-title").value = config.title;

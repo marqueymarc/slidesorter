@@ -2,6 +2,14 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.3.1] - 2026-08-04
+
+### Fixed
+
+- Cache-busted browser assets so Chrome cannot pair an older script with a newly rebuilt gallery.
+- Added explicit no-cache headers for versioned gallery code and markup.
+- Restored Stage and Remove compatibility roots in Settings responses and supplied safe UI defaults instead of `undefined`.
+
 ## [3.3.0] - 2026-08-04
 
 ### Added
@@ -61,3 +69,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 
 [3.2.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.2.0
 [3.3.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.0
+[3.3.1]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.1

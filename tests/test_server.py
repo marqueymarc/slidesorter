@@ -89,6 +89,31 @@ class DestinationPathTests(unittest.TestCase):
             )
 
 
+class SettingsCompatibilityTests(unittest.TestCase):
+    def test_public_settings_always_include_stage_and_remove_compatibility_roots(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = (root / "media").resolve()
+            state = (root / "state").resolve()
+            media.mkdir()
+            state.mkdir()
+            actions = (
+                DestinationAction("stage", "Stage", media / "Staged"),
+                DestinationAction("remove", "Remove", media / "Removed"),
+            )
+            config = GalleryConfig(
+                media_root=media, gallery_root=state, title="Fixture",
+                source_label="Fixture", actions=actions, keep_structure=True,
+                media_mode="both", thumbnail_width=720, thumbnail_policy="lazy", workers=1,
+            )
+
+            settings = config.public_settings()
+
+            self.assertEqual(settings["staged_root"], str(media / "Staged"))
+            self.assertEqual(settings["removed_root"], str(media / "Removed"))
+            self.assertEqual([action["display_label"] for action in settings["actions"]], ["Stage", "Remove"])
+
+
 class HistoryMediaTests(unittest.TestCase):
     def test_history_media_resolves_journaled_destination(self):
         with tempfile.TemporaryDirectory() as temporary:
