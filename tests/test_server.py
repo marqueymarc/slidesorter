@@ -7,12 +7,21 @@ import unittest
 
 from slidesorter.actions import DestinationAction
 from slidesorter.server import (
+    DIRECTORY_PROMPTS,
     GalleryConfig,
     GalleryHandler,
     inside,
     safe_relative,
     validate_roots,
 )
+
+
+class DirectoryPickerCompatibilityTests(unittest.TestCase):
+    def test_current_and_legacy_destination_fields_are_supported(self):
+        self.assertEqual(
+            set(DIRECTORY_PROMPTS),
+            {"media_root", "action_root", "staged_root", "removed_root"},
+        )
 
 
 class PathSafetyTests(unittest.TestCase):

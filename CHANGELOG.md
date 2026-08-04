@@ -2,6 +2,12 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.3.2] - 2026-08-04
+
+### Fixed
+
+- Accepted legacy Stage and Remove field names in the macOS directory picker so cached Settings tabs no longer report `Unknown directory setting`.
+
 ## [3.3.1] - 2026-08-04
 
 ### Fixed
@@ -70,3 +76,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 [3.2.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.2.0
 [3.3.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.0
 [3.3.1]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.1
+[3.3.2]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.2

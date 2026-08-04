@@ -40,6 +40,12 @@ PUBLIC_GALLERY_FILES = {
     "index.html", "app.css", "app.js", "viewer.html", "history.html", "history.js",
     "catalog.json", "manifest.json",
 }
+DIRECTORY_PROMPTS = {
+    "media_root": "Choose the root tree to scan",
+    "action_root": "Choose a destination directory",
+    "staged_root": "Choose the Stage directory",
+    "removed_root": "Choose the Remove directory",
+}
 
 
 def validate_roots(media_root: Path, staged_root: Path, removed_root: Path) -> None:
@@ -751,15 +757,11 @@ class GalleryHandler(SimpleHTTPRequestHandler):
 
     def choose_directory(self, body: dict[str, object]) -> None:
         field = str(body.get("field", ""))
-        prompts = {
-            "media_root": "Choose the root tree to scan",
-            "action_root": "Choose a destination directory",
-        }
-        if field not in prompts:
+        if field not in DIRECTORY_PROMPTS:
             raise ValueError("Unknown directory setting")
         if sys.platform != "darwin":
             raise ValueError("The folder picker is macOS-only; enter the path directly")
-        script = f'POSIX path of (choose folder with prompt "{prompts[field]}")'
+        script = f'POSIX path of (choose folder with prompt "{DIRECTORY_PROMPTS[field]}")'
         chosen = subprocess.run(["/usr/bin/osascript", "-e", script], capture_output=True, text=True)
         if chosen.returncode != 0:
             self.respond_json(HTTPStatus.BAD_REQUEST, {"error": "No folder selected"})
