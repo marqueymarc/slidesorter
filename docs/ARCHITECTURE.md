@@ -7,7 +7,7 @@ SlideSorter uses a local-first two-phase design:
 ```mermaid
 flowchart LR
   A["Media tree"] --> B["Catalog builder"]
-  B --> C["External state directory"]
+  B --> C["Collection state profile"]
   C --> D["Local HTTP server"]
   A --> D
   D --> E["Browser UI"]
@@ -35,6 +35,10 @@ src/slidesorter/
 ```
 
 ## Runtime state layout
+
+By default this lives at `MEDIA_ROOT/.slidesorterstate/default`. Named profiles
+replace `default`; a non-writable media root uses a stable platform-state
+fallback. The builder excludes colocated state from source discovery.
 
 ```text
 state-directory/
@@ -101,7 +105,7 @@ Purged records carry a `purged_at` timestamp. The configured retention period is
 
 Python’s `ThreadingHTTPServer` handles static and media requests concurrently. One reentrant lock serializes settings, moves, Undo, and rebuild operations. A separate thumbnail lock prevents duplicate poster generation.
 
-Run one server per state directory. Multiple processes do not share locks.
+Run one server per state profile. Multiple processes do not share locks.
 
 ## Why not static hosting?
 

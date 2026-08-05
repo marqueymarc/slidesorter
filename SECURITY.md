@@ -24,7 +24,7 @@ SlideSorter is a trusted-user local application. It has write-capable filesystem
 Safe defaults:
 
 - bind to `127.0.0.1`;
-- run one server per state directory;
+- run one server per state profile;
 - grant access only to trusted users;
 - use Tailscale Serve for remote access;
 - keep every destination path deliberate;

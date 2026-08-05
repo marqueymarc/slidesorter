@@ -89,6 +89,8 @@ Undo:
 
 History loads up to 500 current journal entries. Each entry retains the destination label and presentation used when the move occurred. Click an available thumbnail to expand a picture or play a video in place. Use the native video controls for seeking.
 
+History opens in the gallery's current tab. Use Back to SlideSorter to return to the same gallery page, search, media filter, sort, page capacity, and scroll position. The SlideSorter wordmark remains a shortcut for opening a separate, fresh gallery tab.
+
 Every undoable row has an Undo button that restores only that file. A multi-item move has one batch bar before its first remaining item; Undo all restores every remaining file in that batch. Undo latest batch at the top finds the newest fully restorable batch.
 
 Click the thumbnail again, click ×, or press Escape to close a preview. Use Open full size to create a separate media tab.

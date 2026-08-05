@@ -2,7 +2,7 @@
 
 ## Data boundary
 
-SlideSorter reads only the configured media root and its generated state directory. It does not upload media, analytics, filenames, thumbnails, or history.
+SlideSorter reads only the configured media root and its generated state profile. It does not upload media, analytics, filenames, thumbnails, or history.
 
 The application contains no telemetry SDK and makes no application-level outbound requests.
 
@@ -32,7 +32,15 @@ Settings → Rebuild History reads only the source and destination paths already
 
 Git, wheels, source archives, and container images contain only application code and static interface assets. `.gitignore` excludes known runtime state names.
 
-The default state path lives outside the source checkout. This reduces accidental commits but does not replace review before publishing.
+The default state path is `MEDIA_ROOT/.slidesorterstate/default`, excluded from
+the catalog. When the root is not writable, SlideSorter uses a stable,
+collection-specific platform-state fallback. This reduces accidental sharing
+between collections but does not replace review before publishing.
+
+Each profile records its canonical media root and profile name. A state
+directory assigned to another collection is rejected before SlideSorter writes
+generated files or touches History. Existing compatible state is adopted; no
+state is moved or deleted automatically.
 
 ## Ephemeral operation
 

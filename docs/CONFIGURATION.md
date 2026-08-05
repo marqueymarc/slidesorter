@@ -4,13 +4,15 @@
 
 ### `SLIDESORTER_STATE_DIR`
 
-Set the parent directory for generated state.
+Set the parent directory for automatic fallback state when a media root cannot
+host its own hidden state directory.
 
 ```sh
 export SLIDESORTER_STATE_DIR="$HOME/.slidesorter-state"
 ```
 
-The default collection uses a `default` child directory.
+Fallback state uses `collections/<collection-id>/<profile>`. It never uses one
+shared `default` directory for every collection.
 
 ## `slidesorter run`
 
@@ -20,7 +22,8 @@ slidesorter run MEDIA_ROOT [options]
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--state-dir` | Platform state path | Catalog, cache, config, and history root |
+| `--state-dir` | `MEDIA_ROOT/.slidesorterstate/default` when writable | Exact catalog, cache, config, and history root |
+| `--profile` | `default` | Named automatic state profile; uses `MEDIA_ROOT/.slidesorterstate/PROFILE` |
 | `--title` | `Media Library` | Collection heading |
 | `--source-label` | Media root name | Short source description |
 | `--staged-root` | `MEDIA_ROOT/Staged` | Staging destination |
@@ -43,7 +46,8 @@ Use Build for scheduled scans or separated service management.
 slidesorter build --media-root PATH [options]
 ```
 
-`--media-root` is required. `--gallery-root` controls the generated state directory.
+`--media-root` is required. If `--gallery-root` is omitted, Build uses the same
+per-collection default as Run. `--profile` selects its named profile.
 
 ## `slidesorter serve`
 
@@ -51,13 +55,20 @@ slidesorter build --media-root PATH [options]
 slidesorter serve --config PATH [--host HOST] [--port PORT]
 ```
 
-The default config is the platform default state path.
+`--config` is required because multiple collection profiles may coexist.
 
 ## Destination settings
 
 The browser Settings panel stores an ordered `actions` list in `gallery-config.json`. Each entry has a stable id, a raw label, and an absolute destination root. The first two actions are direct buttons; later actions appear under More.
 
-The builder preserves actions and the directory-structure setting when the same state directory is rebuilt or started again. Existing Stage and Remove configuration migrates automatically.
+The builder preserves actions and the directory-structure setting when the same state profile is rebuilt or started again. Existing Stage and Remove configuration migrates automatically.
+
+Each state profile records its canonical media root and profile name. Reusing it
+for a different root, or a different profile, fails before it rewrites the
+catalog, configuration, assets, or History. Older compatible state is adopted
+on its next successful build without clearing History. To use existing state at
+an old location, pass that location with `--state-dir`; SlideSorter never moves
+it automatically.
 
 The History retention setting is also preserved. Changing it through Settings → Rebuild History updates `gallery-config.json` without rescanning the media catalog.
 

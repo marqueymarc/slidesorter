@@ -26,10 +26,10 @@ from .actions import (
     legacy_actions,
     validate_actions,
 )
-from .builder import DEFAULT_GALLERY_ROOT, DEFAULT_HISTORY_RETENTION_DAYS, thumbnail_for
+from .builder import DEFAULT_HISTORY_RETENTION_DAYS, thumbnail_for
+from .state import DEFAULT_PROFILE, StateCompatibilityError, ensure_compatible_state, validate_profile
 
 
-DEFAULT_CONFIG = DEFAULT_GALLERY_ROOT / "gallery-config.json"
 VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi", ".mts", ".m2ts", ".3gp", ".mkv"}
 PICTURE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".tif", ".tiff", ".bmp"
@@ -73,6 +73,7 @@ class GalleryConfig:
     thumbnail_width: int
     thumbnail_policy: str
     workers: int
+    state_profile: str = DEFAULT_PROFILE
 
     @classmethod
     def load(cls, path: Path) -> "GalleryConfig":
@@ -82,6 +83,14 @@ class GalleryConfig:
             raise SystemExit(f"Gallery config not found: {path}. Run the gallery builder first.") from error
         media_root = Path(raw["media_root"]).expanduser().resolve()
         gallery_root = Path(raw["gallery_root"]).expanduser().resolve()
+        identity = raw.get("state_identity")
+        try:
+            state_profile = validate_profile(
+                str(identity.get("profile", DEFAULT_PROFILE)) if isinstance(identity, dict) else DEFAULT_PROFILE
+            )
+            ensure_compatible_state(gallery_root, media_root, state_profile)
+        except (StateCompatibilityError, ValueError) as error:
+            raise SystemExit(str(error)) from error
         try:
             if isinstance(raw.get("actions"), list):
                 actions = actions_from_raw(media_root, raw["actions"])
@@ -120,11 +129,16 @@ class GalleryConfig:
             thumbnail_width=int(raw.get("thumbnail_width", 720)),
             thumbnail_policy=thumbnail_policy,
             workers=max(1, int(raw.get("workers", 4))),
+            state_profile=state_profile,
         )
 
     @classmethod
     def from_settings(cls, current: "GalleryConfig", raw: dict[str, object]) -> "GalleryConfig":
         media_root = Path(str(raw.get("media_root", ""))).expanduser().resolve()
+        if media_root != current.media_root:
+            raise ValueError(
+                "This state profile belongs to its current root tree. Start SlideSorter with the new root instead."
+            )
         actions = actions_from_raw(media_root, raw.get("actions"))
         mode = str(raw.get("media_mode", ""))
         if mode not in MEDIA_MODES:
@@ -156,6 +170,7 @@ class GalleryConfig:
             thumbnail_width=current.thumbnail_width,
             thumbnail_policy=current.thumbnail_policy,
             workers=current.workers,
+            state_profile=current.state_profile,
         )
 
     @property
@@ -173,6 +188,17 @@ class GalleryConfig:
     @property
     def action_roots(self) -> tuple[Path, ...]:
         return tuple(action.root for action in self.actions)
+
+    @property
+    def excluded_source_roots(self) -> tuple[Path, ...]:
+        return tuple(
+            root
+            for root in (*self.action_roots, self.gallery_root)
+            if root.is_relative_to(self.media_root)
+        )
+
+    def source_is_excluded(self, source: Path) -> bool:
+        return any(source.is_relative_to(root) for root in self.excluded_source_roots)
 
     def action_for_id(self, action_id: object) -> DestinationAction:
         if not isinstance(action_id, str):
@@ -217,12 +243,13 @@ class GalleryConfig:
             "--thumbnail-width", str(self.thumbnail_width),
             "--thumbnail-policy", self.thumbnail_policy,
             "--workers", str(self.workers),
+            "--profile", self.state_profile,
         ]
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
+    parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     return parser.parse_args(argv)
@@ -536,9 +563,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             source = inside(self.config.media_root, relative)
             if source.suffix.lower() not in MEDIA_EXTENSIONS or not source.is_file():
                 raise ValueError("Thumbnail source is not an existing media file")
-            for action_root in self.config.action_roots:
-                if action_root.is_relative_to(self.config.media_root) and source.is_relative_to(action_root):
-                    raise ValueError("Destination thumbnails are private")
+            if self.config.source_is_excluded(source):
+                raise ValueError("Destination and state thumbnails are private")
             kind = "video" if source.suffix.lower() in VIDEO_EXTENSIONS else "picture"
             with self.thumbnail_lock:
                 thumb, problem = thumbnail_for(
@@ -552,9 +578,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             media = inside(self.config.media_root, relative)
             if media.suffix.lower() not in MEDIA_EXTENSIONS:
                 raise ValueError("Only configured media files can be served")
-            for action_root in self.config.action_roots:
-                if action_root.is_relative_to(self.config.media_root) and media.is_relative_to(action_root):
-                    raise ValueError("Destination files are not exposed by this gallery")
+            if self.config.source_is_excluded(media):
+                raise ValueError("Destination and state files are not exposed by this gallery")
             return media, True
         raise FileNotFoundError
 
@@ -668,9 +693,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             raise ValueError("A relative media id is required")
         relative = safe_relative(value)
         source = inside(self.config.media_root, relative)
-        for action_root in self.config.action_roots:
-            if action_root.is_relative_to(self.config.media_root) and source.is_relative_to(action_root):
-                raise ValueError("Items already inside a destination cannot be acted on here")
+        if self.config.source_is_excluded(source):
+            raise ValueError("Items inside destinations or state cannot be acted on here")
         if source.suffix.lower() not in MEDIA_EXTENSIONS or not source.is_file():
             raise ValueError("The requested source is not an existing picture or video")
         return source, relative

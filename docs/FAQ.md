@@ -46,7 +46,13 @@ Yes. Cross-disk moves may copy the entire file before removing the source.
 
 ## Can two users operate simultaneously?
 
-Avoid it. One server serializes actions, but two people can still make surprising workflow decisions. One state directory must have only one server process.
+Avoid it. One server serializes actions, but two people can still make surprising workflow decisions. One state profile must have only one server process.
+
+## Can I run more than one SlideSorter collection or workflow?
+
+Yes. Each root has its own hidden default state profile. For independent
+workflows on one root, use `slidesorter run MEDIA_ROOT --profile NAME`. Do not
+run two servers on the same profile.
 
 ## What happens after I empty Remove outside SlideSorter?
 

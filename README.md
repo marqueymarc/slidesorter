@@ -71,10 +71,18 @@ sudo apt-get install ffmpeg
 
 ## Installation
 
+Install with Homebrew:
+
+```sh
+brew install marqueymarc/homebrew-tap/slidesorter
+```
+
+Upgrade later with `brew update && brew upgrade slidesorter`.
+
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.5.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.6.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -103,12 +111,19 @@ Open:
 http://127.0.0.1:8765/gallery/
 ```
 
-SlideSorter writes generated state outside the repository:
+SlideSorter keeps generated state with the collection by default:
 
-- macOS: `~/Library/Application Support/SlideSorter/default`
-- Linux: `~/.local/state/slidesorter/default`
-- Override: set `SLIDESORTER_STATE_DIR`
-- Per run: pass `--state-dir PATH`
+- Default: `MEDIA_ROOT/.slidesorterstate/default`
+- Separate workflow: pass `--profile NAME`, which uses
+  `MEDIA_ROOT/.slidesorterstate/NAME`
+- If the media root is not writable, it falls back to a stable,
+  collection-specific directory under the platform state location (or under
+  `SLIDESORTER_STATE_DIR` if set).
+- Per run: pass `--state-dir PATH` for an exact state-profile directory.
+
+The hidden state directory is automatically excluded from the media catalog.
+Its configuration records the collection root and profile, so accidentally
+reusing it for another root stops safely instead of mixing History.
 
 Stop the server with `Control-C`.
 
@@ -131,7 +146,7 @@ slidesorter run "/Volumes/Archive/Media" \
   --removed-root "/Volumes/Review Holding"
 ```
 
-After startup, use Settings to rename, reorder, remove, or add up to 16 destinations. The first two stay visible as buttons; the rest appear under More. Destination settings survive rebuilds and later invocations that use the same state directory.
+After startup, use Settings to rename, reorder, remove, or add up to 16 destinations. The first two stay visible as buttons; the rest appear under More. Destination settings survive rebuilds and later invocations that use the same state profile. To review another root, start a separate SlideSorter instance rather than changing the root in Settings.
 
 Keep directory structure is enabled by default. Disable it to move files directly into each destination root. Flat moves refuse duplicate filenames and existing destinations.
 
@@ -198,7 +213,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.5.0
+  ghcr.io/marqueymarc/slidesorter:3.6.0
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.
@@ -276,7 +291,7 @@ Browser playback depends on browser codec support. SlideSorter serves HTTP byte 
 - The server has no built-in accounts or authentication.
 - Folder pickers are native on macOS; other systems require typed paths.
 - Cross-device moves can be slow and cannot be atomic.
-- Runtime state is single-process. Do not run two servers against one state directory.
+- Runtime state is single-process. Do not run two servers against one state profile.
 
 ## Contributing
 

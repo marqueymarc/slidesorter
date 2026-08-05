@@ -1,7 +1,22 @@
+const galleryReturnKey = "slidesorter-gallery-return";
+const galleryRestoreKey = "slidesorter-gallery-restore";
 const savedPageSize = Number(localStorage.getItem("media-gallery-page-size"));
+let restoredView = null;
+if (sessionStorage.getItem(galleryRestoreKey) === "1") {
+  try { restoredView = JSON.parse(sessionStorage.getItem(galleryReturnKey) || "null"); }
+  catch { restoredView = null; }
+  sessionStorage.removeItem(galleryRestoreKey);
+}
+if (restoredView && "scrollRestoration" in history) history.scrollRestoration = "manual";
+const restoredPageSize = Number(restoredView?.pageSize);
+const initialPageSize = restoredPageSize >= 25 && restoredPageSize <= 500 && restoredPageSize % 25 === 0
+  ? restoredPageSize
+  : (savedPageSize >= 25 && savedPageSize <= 500 && savedPageSize % 25 === 0 ? savedPageSize : 100);
+const restoredSort = ["oldest", "newest", "name", "size"].includes(restoredView?.sort) ? restoredView.sort : "oldest";
+const restoredKind = ["both", "picture", "video"].includes(restoredView?.kind) ? restoredView.kind : "both";
 const state = {
-  catalog: null, query: "", sort: "oldest", kind: "both", active: null,
-  page: 1, pageSize: savedPageSize >= 25 && savedPageSize <= 500 && savedPageSize % 25 === 0 ? savedPageSize : 100,
+  catalog: null, query: typeof restoredView?.query === "string" ? restoredView.query : "", sort: restoredSort, kind: restoredKind, active: null,
+  page: Math.max(1, Number.parseInt(restoredView?.page, 10) || 1), pageSize: initialPageSize,
   requestNumber: 0, selectionAll: false, allCriteria: null,
   selectedIds: new Set(), excludedIds: new Set(), lastSelectedId: null,
 };
@@ -24,8 +39,36 @@ const pageTotal = document.querySelector("#page-total");
 const destinationList = document.querySelector("#destination-list");
 const bulkActions = document.querySelector("#bulk-actions");
 pageSize.value = String(state.pageSize);
+search.value = state.query;
+sort.value = state.sort;
+document.querySelectorAll(".kind-option").forEach(option => option.classList.toggle("active", option.dataset.kind === state.kind));
 
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
+
+function restoreScrollPosition(value) {
+  const scrollY = Math.max(0, Number(value) || 0);
+  let observer = null;
+  let timeout = null;
+  const apply = () => {
+    window.scrollTo(0, scrollY);
+    observer?.disconnect();
+    if (timeout) clearTimeout(timeout);
+  };
+  const applyWhenReady = () => {
+    const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+    if (maxScroll + 1 < scrollY) return false;
+    apply();
+    return true;
+  };
+  requestAnimationFrame(() => {
+    if (applyWhenReady()) return;
+    if ("ResizeObserver" in window) {
+      observer = new ResizeObserver(applyWhenReady);
+      observer.observe(document.body);
+    }
+    timeout = setTimeout(apply, 1500);
+  });
+}
 
 const iconPaths = {
   trash: '<path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/>',
@@ -598,7 +641,7 @@ gallery.addEventListener("click", event => {
   const item = state.catalog.items.find(candidate => candidate.id === card.dataset.id);
   if (!item) return;
   if (event.target.closest(".card-select")) {
-    event.preventDefault();
+    if (!event.target.matches(".card-checkbox")) event.preventDefault();
     handleCardSelection(item, event, true);
     return;
   }
@@ -678,6 +721,17 @@ bulkActions.addEventListener("click", event => {
 });
 document.querySelector("#refresh").addEventListener("click", refreshCatalog);
 undoLast.addEventListener("click", () => undo());
+document.querySelector("#history-link").addEventListener("click", () => {
+  const visiblePageSize = Number(pageSize.value);
+  sessionStorage.setItem(galleryReturnKey, JSON.stringify({
+    page: state.page,
+    pageSize: visiblePageSize >= 25 && visiblePageSize <= 500 && visiblePageSize % 25 === 0 ? visiblePageSize : state.pageSize,
+    query: search.value,
+    kind: state.kind,
+    sort: state.sort,
+    scrollY: window.scrollY,
+  }));
+});
 document.querySelector("#settings-open").addEventListener("click", openSettings);
 document.querySelector("#settings-close").addEventListener("click", closeSettings);
 document.querySelector("#settings-cancel").addEventListener("click", closeSettings);
@@ -771,4 +825,19 @@ document.addEventListener("click", event => {
   if (!event.target.closest(".action-menu-wrap")) closeActionMenus();
 });
 
-Promise.all([loadCatalog(), updateUndoState()]);
+Promise.all([loadCatalog(), updateUndoState()]).then(() => {
+  if (!restoredView) return;
+  restoreScrollPosition(restoredView.scrollY);
+  sessionStorage.removeItem(galleryReturnKey);
+  restoredView = null;
+});
+
+window.addEventListener("pageshow", event => {
+  if (!event.persisted) return;
+  try {
+    const returnView = JSON.parse(sessionStorage.getItem(galleryReturnKey) || "null");
+    if (returnView) restoreScrollPosition(returnView.scrollY);
+  } catch { /* Ignore an invalid session fallback and keep the browser-restored view. */ }
+  sessionStorage.removeItem(galleryRestoreKey);
+  sessionStorage.removeItem(galleryReturnKey);
+});

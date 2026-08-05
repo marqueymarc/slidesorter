@@ -39,7 +39,11 @@ class BuilderTests(unittest.TestCase):
             self.assertTrue((state / "index.html").is_file())
             self.assertTrue((state / "history.js").is_file())
             index = (state / "index.html").read_text()
-            self.assertIn("/gallery/app.js?v=3.5.0", index)
+            self.assertIn("/gallery/app.js?v=3.6.0", index)
+            self.assertIn('id="history-link"', index)
+            history = (state / "history.html").read_text()
+            self.assertIn('id="history-back"', history)
+            self.assertIn("Back to SlideSorter", history)
             self.assertFalse((media / "catalog.json").exists())
 
     def test_stage_and_remove_trees_are_excluded(self):
@@ -57,6 +61,40 @@ class BuilderTests(unittest.TestCase):
 
             catalog = json.loads((state / "catalog.json").read_text())
             self.assertEqual([item["id"] for item in catalog["items"]], ["keep.jpg"])
+
+    def test_default_colocated_state_is_excluded_from_the_catalog(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = root / "media"
+            state = media / ".slidesorterstate" / "default"
+            media.mkdir()
+            state.mkdir(parents=True)
+            (media / "keep.jpg").write_bytes(b"keep")
+            (state / "hidden.jpg").write_bytes(b"generated-state")
+
+            builder.main(["--media-root", str(media)])
+
+            catalog = json.loads((state / "catalog.json").read_text())
+            config = json.loads((state / "gallery-config.json").read_text())
+            self.assertEqual([item["id"] for item in catalog["items"]], ["keep.jpg"])
+            self.assertEqual(config["state_identity"]["profile"], "default")
+
+    def test_mismatched_state_is_rejected_before_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first"
+            second = root / "second"
+            state = root / "state"
+            for directory in (first, second, state):
+                directory.mkdir()
+            (state / "gallery-config.json").write_text(json.dumps({"media_root": str(first.resolve())}))
+            sentinel = state / "action-history.json"
+            sentinel.write_text("preserve")
+
+            with self.assertRaises(SystemExit):
+                builder.main(["--media-root", str(second), "--gallery-root", str(state)])
+
+            self.assertEqual(sentinel.read_text(), "preserve")
 
     def test_destinations_and_structure_setting_survive_the_next_build(self):
         with tempfile.TemporaryDirectory() as temporary:

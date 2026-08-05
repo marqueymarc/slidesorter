@@ -4,6 +4,23 @@
 
 Use `pipx` for a normal desktop installation. Use Docker for an isolated runtime. Use an editable checkout when contributing.
 
+## Install with Homebrew
+
+```sh
+brew install marqueymarc/homebrew-tap/slidesorter
+```
+
+The formula installs Python and ffmpeg dependencies. Upgrade when a newer
+SlideSorter release is published:
+
+```sh
+brew update
+brew upgrade slidesorter
+```
+
+The tap refreshes its formula from the latest GitHub release daily and can also
+be manually run from its Actions page.
+
 ## Install with pipx
 
 Install `pipx`:
@@ -16,7 +33,7 @@ pipx ensurepath
 Install the release wheel:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.5.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.6.0-py3-none-any.whl"
 ```
 
 Verify the command:
@@ -74,7 +91,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.5.0
+  ghcr.io/marqueymarc/slidesorter:3.6.0
 ```
 
 Mount `/media` read-write to use destination actions and Undo. Mount it read-only only for browsing.

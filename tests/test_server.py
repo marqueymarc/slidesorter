@@ -68,10 +68,10 @@ class RangeTests(unittest.TestCase):
 class DestinationPathTests(unittest.TestCase):
     def make_handler(self, root: Path, keep_structure: bool) -> tuple[GalleryHandler, DestinationAction]:
         media = root / "media"
-        state = root / "state"
+        state = media / ".slidesorterstate" / "default"
         destination = media / "Removed"
         media.mkdir()
-        state.mkdir()
+        state.mkdir(parents=True)
         action = DestinationAction("remove", "Remove", destination.resolve())
         config = GalleryConfig(
             media_root=media.resolve(), gallery_root=state.resolve(), title="Fixture",
@@ -101,6 +101,15 @@ class DestinationPathTests(unittest.TestCase):
                 action.root / "photo.jpg",
             )
 
+    def test_colocated_state_is_not_an_actionable_source(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            handler, _ = self.make_handler(Path(temporary), True)
+            hidden = handler.config.gallery_root / "hidden.jpg"
+            hidden.write_bytes(b"state")
+
+            with self.assertRaises(ValueError):
+                handler.source_from_id(".slidesorterstate/default/hidden.jpg")
+
 
 class SettingsCompatibilityTests(unittest.TestCase):
     def test_public_settings_always_include_stage_and_remove_compatibility_roots(self):
@@ -127,6 +136,40 @@ class SettingsCompatibilityTests(unittest.TestCase):
             self.assertEqual(settings["removed_root"], str(media / "Removed"))
             self.assertEqual([action["display_label"] for action in settings["actions"]], ["Stage", "Remove"])
             self.assertEqual(settings["history_retention_days"], 90)
+
+    def test_settings_cannot_reassign_an_existing_state_profile_to_another_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = (root / "media").resolve()
+            other = (root / "other").resolve()
+            state = (root / "state").resolve()
+            for directory in (media, other, state):
+                directory.mkdir()
+            config = GalleryConfig(
+                media_root=media,
+                gallery_root=state,
+                title="Fixture",
+                source_label="Fixture",
+                actions=(DestinationAction("stage", "Stage", media / "Staged"),),
+                keep_structure=True,
+                history_retention_days=90,
+                media_mode="both",
+                thumbnail_width=720,
+                thumbnail_policy="lazy",
+                workers=1,
+            )
+
+            with self.assertRaises(ValueError):
+                GalleryConfig.from_settings(
+                    config,
+                    {
+                        "media_root": str(other),
+                        "actions": [{"id": "stage", "label": "Stage", "root": str(other / "Staged")}],
+                        "media_mode": "both",
+                        "title": "Fixture",
+                        "source_label": "Fixture",
+                    },
+                )
 
 
 class HistoryMediaTests(unittest.TestCase):

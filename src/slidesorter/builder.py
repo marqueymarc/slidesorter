@@ -12,7 +12,6 @@ import os
 from pathlib import Path
 import shutil
 from subprocess import DEVNULL, run
-import sys
 from urllib.parse import quote
 
 from .actions import (
@@ -21,20 +20,23 @@ from .actions import (
     legacy_actions,
     validate_actions,
 )
+from .state import (
+    DEFAULT_PROFILE,
+    StateCompatibilityError,
+    automatic_state_dir,
+    ensure_compatible_state,
+    platform_state_root,
+    state_identity,
+    validate_profile,
+)
 
 
 def default_state_root() -> Path:
-    override = os.environ.get("SLIDESORTER_STATE_DIR")
-    if override:
-        return Path(override).expanduser()
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "SlideSorter"
-    if os.name == "nt":
-        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "SlideSorter"
-    return Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state")) / "slidesorter"
+    """Backward-compatible name for the platform fallback state root."""
+
+    return platform_state_root()
 
 
-DEFAULT_GALLERY_ROOT = default_state_root() / "default"
 ASSET_ROOT = Path(__file__).with_name("assets")
 VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi", ".mts", ".m2ts", ".3gp", ".mkv"}
 PICTURE_EXTENSIONS = {
@@ -47,7 +49,12 @@ DEFAULT_HISTORY_RETENTION_DAYS = 90
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--media-root", type=Path, required=True)
-    parser.add_argument("--gallery-root", type=Path, default=DEFAULT_GALLERY_ROOT)
+    parser.add_argument("--gallery-root", type=Path)
+    parser.add_argument(
+        "--profile",
+        default=DEFAULT_PROFILE,
+        help="Named state profile when --gallery-root is omitted (default: %(default)s)",
+    )
     parser.add_argument("--title")
     parser.add_argument("--source-label", help="Defaults to the media root directory name")
     parser.add_argument("--staged-name", default="Staged", help="Directory name under the media root")
@@ -209,7 +216,19 @@ def thumbnail_for(media: Path, thumbs: Path, width: int, kind: str) -> tuple[Pat
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     media_root = args.media_root.expanduser().resolve()
-    gallery_root = args.gallery_root.expanduser().resolve()
+    try:
+        profile = validate_profile(args.profile)
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    gallery_root = (
+        args.gallery_root.expanduser().resolve()
+        if args.gallery_root is not None
+        else automatic_state_dir(media_root, profile).resolve()
+    )
+    try:
+        ensure_compatible_state(gallery_root, media_root, profile)
+    except StateCompatibilityError as error:
+        raise SystemExit(str(error)) from error
     remembered = remembered_config(gallery_root, media_root) or {}
     title = args.title or str(remembered.get("title", "Media Library"))
     source_label = args.source_label or str(remembered.get("source_label", media_root.name))
@@ -240,7 +259,11 @@ def main(argv: list[str] | None = None) -> None:
     gallery_root.mkdir(parents=True, exist_ok=True)
     thumbs = gallery_root / "thumbs"
     thumbs.mkdir(exist_ok=True)
-    excluded = tuple(action.root for action in actions if action.root.is_relative_to(media_root))
+    excluded = tuple(
+        root
+        for root in (*[action.root for action in actions], gallery_root)
+        if root.is_relative_to(media_root)
+    )
     media_files = discover_media(media_root, excluded, selected_extensions(media_mode))
 
     results: dict[Path, tuple[Path, str | None]] = {
@@ -307,6 +330,7 @@ def main(argv: list[str] | None = None) -> None:
         "version": 5,
         "media_root": str(media_root),
         "gallery_root": str(gallery_root),
+        "state_identity": state_identity(media_root, profile),
         "title": title,
         "source_label": source_label,
         "actions": [action.config_dict() for action in actions],

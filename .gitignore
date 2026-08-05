@@ -15,6 +15,7 @@ htmlcov/
 
 # Runtime state must never enter source control.
 .slidesorter/
+.slidesorterstate/
 state/
 catalog.json
 gallery-config.json

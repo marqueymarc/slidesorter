@@ -2,6 +2,29 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.6.0] - 2026-08-04
+
+### Added
+
+- Added Back to SlideSorter navigation on History and preserved the gallery page,
+  search, media filter, sort, page capacity, and scroll position on return.
+- Added collection-scoped default state at `.slidesorterstate/default` and named
+  profiles through `slidesorter run MEDIA_ROOT --profile NAME`.
+- Added collection/profile identity checks that reject accidental state reuse
+  before any catalog, asset, configuration, or History write.
+
+### Changed
+
+- Kept the SlideSorter wordmark as a separate fresh-tab action so Back and New Gallery remain unambiguous.
+- Excluded colocated generated state from scanning and direct media access.
+- Made `slidesorter serve --config PATH` explicit because multiple profiles may
+  exist on one machine.
+- Added Homebrew installation through `marqueymarc/homebrew-tap`.
+
+### Fixed
+
+- Made a card's checkbox show its checkmark immediately on the first selection click.
+
 ## [3.5.0] - 2026-08-04
 
 ### Added
@@ -111,3 +134,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 [3.3.2]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.3.2
 [3.4.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.4.0
 [3.5.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.5.0
+[3.6.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.6.0

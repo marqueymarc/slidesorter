@@ -1,5 +1,19 @@
 const list = document.querySelector("#history-list");
 const undoLast = document.querySelector("#history-undo-last");
+const galleryReturnKey = "slidesorter-gallery-return";
+const galleryRestoreKey = "slidesorter-gallery-restore";
+
+document.querySelector("#history-back").addEventListener("click", event => {
+  event.preventDefault();
+  sessionStorage.setItem(galleryRestoreKey, "1");
+  let referrer = null;
+  try { referrer = document.referrer ? new URL(document.referrer) : null; }
+  catch { referrer = null; }
+  const cameFromGallery = referrer?.origin === location.origin
+    && ["/gallery/", "/gallery/index.html"].includes(referrer.pathname);
+  if (cameFromGallery && history.length > 1) history.back();
+  else location.assign("/gallery/");
+});
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
 let activePreview = null;
 const iconPaths = {
