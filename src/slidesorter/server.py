@@ -27,7 +27,13 @@ from .actions import (
     validate_actions,
 )
 from .builder import DEFAULT_HISTORY_RETENTION_DAYS, thumbnail_for
-from .state import DEFAULT_PROFILE, StateCompatibilityError, ensure_compatible_state, validate_profile
+from .state import (
+    DEFAULT_PROFILE,
+    StateCompatibilityError,
+    ensure_compatible_state,
+    validate_appearance,
+    validate_profile,
+)
 
 
 VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi", ".mts", ".m2ts", ".3gp", ".mkv"}
@@ -37,7 +43,7 @@ PICTURE_EXTENSIONS = {
 MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | PICTURE_EXTENSIONS
 MEDIA_MODES = {"videos", "pictures", "both"}
 PUBLIC_GALLERY_FILES = {
-    "index.html", "app.css", "app.js", "viewer.html", "history.html", "history.js",
+    "index.html", "app.css", "appearance.js", "app.js", "viewer.html", "history.html", "history.js",
     "catalog.json", "manifest.json",
 }
 DIRECTORY_PROMPTS = {
@@ -74,6 +80,7 @@ class GalleryConfig:
     thumbnail_policy: str
     workers: int
     state_profile: str = DEFAULT_PROFILE
+    appearance: str = "system"
 
     @classmethod
     def load(cls, path: Path) -> "GalleryConfig":
@@ -110,6 +117,10 @@ class GalleryConfig:
         thumbnail_policy = str(raw.get("thumbnail_policy", "lazy"))
         if thumbnail_policy not in {"lazy", "eager"}:
             raise SystemExit(f"Unsupported thumbnail policy in config: {thumbnail_policy}")
+        try:
+            appearance = validate_appearance(raw.get("appearance", "system"))
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
         if not gallery_root.is_dir():
             raise SystemExit(f"Gallery root is not a directory: {gallery_root}")
         history_retention_days = int(
@@ -130,6 +141,7 @@ class GalleryConfig:
             thumbnail_policy=thumbnail_policy,
             workers=max(1, int(raw.get("workers", 4))),
             state_profile=state_profile,
+            appearance=appearance,
         )
 
     @classmethod
@@ -158,6 +170,7 @@ class GalleryConfig:
             raise ValueError("History retention must be a whole number of days") from error
         if history_retention_days < 0 or history_retention_days > 3650:
             raise ValueError("History retention must be between 0 and 3650 days")
+        appearance = validate_appearance(raw.get("appearance", current.appearance))
         return cls(
             media_root=media_root,
             gallery_root=current.gallery_root,
@@ -171,6 +184,7 @@ class GalleryConfig:
             thumbnail_policy=current.thumbnail_policy,
             workers=current.workers,
             state_profile=current.state_profile,
+            appearance=appearance,
         )
 
     @property
@@ -227,6 +241,7 @@ class GalleryConfig:
             "media_mode": self.media_mode,
             "title": self.title,
             "source_label": self.source_label,
+            "appearance": self.appearance,
         }
 
     def rebuild_command(self) -> list[str]:
@@ -240,6 +255,7 @@ class GalleryConfig:
             "--keep-structure" if self.keep_structure else "--no-keep-structure",
             "--history-retention-days", str(self.history_retention_days),
             "--media-mode", self.media_mode,
+            "--appearance", self.appearance,
             "--thumbnail-width", str(self.thumbnail_width),
             "--thumbnail-policy", self.thumbnail_policy,
             "--workers", str(self.workers),
@@ -906,7 +922,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         allowed = {
             "/api/reveal", "/api/move", "/api/bulk-move", "/api/refresh",
             "/api/remove", "/api/stage", "/api/bulk-stage", "/api/bulk-remove",
-            "/api/settings", "/api/undo", "/api/choose-directory", "/api/rebuild-history",
+            "/api/settings", "/api/appearance", "/api/undo", "/api/choose-directory", "/api/rebuild-history",
             "/api/catalog-range",
         }
         if action not in allowed:
@@ -927,6 +943,8 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             with self.gallery_lock:
                 if action == "/api/settings":
                     self.save_settings(self.read_json_body())
+                elif action == "/api/appearance":
+                    self.save_appearance(self.read_json_body())
                 elif action == "/api/rebuild-history":
                     self.rebuild_history(self.read_json_body(allow_empty=True))
                 elif action == "/api/refresh":
@@ -985,6 +1003,24 @@ class GalleryHandler(SimpleHTTPRequestHandler):
         if not succeeded:
             raise RuntimeError(detail or "The catalog rebuild failed; settings were not changed")
         self.reload_runtime()
+        self.respond_json(HTTPStatus.OK, self.config.public_settings())
+
+    def save_appearance(self, body: dict[str, object]) -> None:
+        appearance = validate_appearance(body.get("appearance", ""))
+        if appearance == self.config.appearance:
+            self.respond_json(HTTPStatus.OK, self.config.public_settings())
+            return
+        raw_config = json.loads(self.config_path.read_text(encoding="utf-8"))
+        if not isinstance(raw_config, dict):
+            raise RuntimeError("The gallery config has an invalid format")
+        raw_config["appearance"] = appearance
+        temporary = self.config_path.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(raw_config, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(self.config_path)
+        self.server.gallery_config = replace(  # type: ignore[attr-defined]
+            self.config,
+            appearance=appearance,
+        )
         self.respond_json(HTTPStatus.OK, self.config.public_settings())
 
     def rebuild_history(self, body: dict[str, object]) -> None:

@@ -19,6 +19,7 @@ const state = {
   page: Math.max(1, Number.parseInt(restoredView?.page, 10) || 1), pageSize: initialPageSize,
   requestNumber: 0, selectionAll: false, allCriteria: null,
   selectedIds: new Set(), excludedIds: new Set(), lastSelectedId: null,
+  appearance: "system",
 };
 const gallery = document.querySelector("#gallery");
 const search = document.querySelector("#search");
@@ -295,7 +296,7 @@ function cardMarkup(item, index) {
   const directActions = actions.slice(0, 2).map(action => actionButtonMarkup(action)).join("");
   const moreActions = overflowMarkup(actions.slice(2));
   return `<article class="card ${selected ? "selected" : ""}" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 12) * 18}ms">
-    <div class="preview"><a class="preview-link" href="${escapeHtml(item.viewer_url)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(item.name)} in a new tab">${thumb}</a>${play}<span class="kind-badge">${item.kind === "video" ? "Video" : "Pic"}</span><label class="card-select" title="Select ${escapeHtml(item.name)}"><input class="card-checkbox" type="checkbox" ${selected ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></label></div>
+    <div class="preview"><a class="preview-link" href="${escapeHtml(item.viewer_url)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(item.name)} in a new tab">${thumb}</a>${play}<label class="card-select" title="Select ${escapeHtml(item.name)}"><input class="card-checkbox" type="checkbox" ${selected ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></label></div>
     <div class="card-body"><h2 class="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h2><p class="folder" title="${escapeHtml(item.folder)}">${escapeHtml(item.folder || state.catalog.source_label)}</p><div class="metadata"><span>${escapeHtml(item.size_label)}</span><span>${escapeHtml(item.modified_label)}</span></div>
       <div class="actions"><div class="action-row"><a class="action primary" href="${escapeHtml(item.viewer_url)}" target="_blank" rel="noopener">↗ ${verb}</a><button class="action secondary reveal" type="button">Finder</button></div><div class="action-row file-row destination-actions">${directActions}${moreActions}</div></div>
     </div></article>`;
@@ -573,6 +574,8 @@ async function openSettings() {
     document.querySelector("#media-root").value = config.media_root;
     renderDestinationEditor(configuredDestinations(config));
     document.querySelector("#keep-structure").checked = config.keep_structure !== false;
+    state.appearance = config.appearance || "system";
+    document.querySelector("#appearance").value = state.appearance;
     document.querySelector("#media-mode").value = config.media_mode;
     document.querySelector("#gallery-title").value = config.title;
     document.querySelector("#source-label").value = config.source_label;
@@ -733,6 +736,29 @@ document.querySelector("#history-link").addEventListener("click", () => {
   }));
 });
 document.querySelector("#settings-open").addEventListener("click", openSettings);
+document.querySelector("#appearance").addEventListener("change", async event => {
+  const select = event.currentTarget;
+  const previous = state.appearance;
+  const appearance = select.value;
+  window.SlideSorterAppearance?.apply(appearance);
+  select.disabled = true;
+  try {
+    const config = await jsonRequest("/api/appearance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ appearance }),
+    });
+    state.appearance = config.appearance;
+    select.value = state.appearance;
+    window.SlideSorterAppearance?.apply(state.appearance);
+    toast(`Appearance: ${state.appearance === "system" ? "System default" : state.appearance[0].toUpperCase() + state.appearance.slice(1)}`);
+  } catch (error) {
+    state.appearance = previous;
+    select.value = previous;
+    window.SlideSorterAppearance?.apply(previous);
+    toast(error.message, { error: true });
+  } finally { select.disabled = false; }
+});
 document.querySelector("#settings-close").addEventListener("click", closeSettings);
 document.querySelector("#settings-cancel").addEventListener("click", closeSettings);
 scrim.addEventListener("click", closeSettings);
@@ -799,7 +825,9 @@ document.querySelector("#settings-form").addEventListener("submit", async event 
     settings.keep_structure = document.querySelector("#keep-structure").checked;
     const requestedPageSize = Math.max(25, Math.min(500, Math.round(Number(settings.page_capacity || 100) / 25) * 25));
     delete settings.page_capacity;
-    await jsonRequest("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+    const config = await jsonRequest("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+    state.appearance = config.appearance || "system";
+    window.SlideSorterAppearance?.apply(state.appearance);
     state.pageSize = requestedPageSize;
     pageSize.value = String(requestedPageSize);
     localStorage.setItem("media-gallery-page-size", String(requestedPageSize));

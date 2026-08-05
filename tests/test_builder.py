@@ -36,10 +36,13 @@ class BuilderTests(unittest.TestCase):
             self.assertEqual(config["media_root"], str(media.resolve()))
             self.assertEqual(config["gallery_root"], str(state.resolve()))
             self.assertEqual(config["history_retention_days"], 90)
+            self.assertEqual(config["appearance"], "system")
             self.assertTrue((state / "index.html").is_file())
             self.assertTrue((state / "history.js").is_file())
+            self.assertTrue((state / "appearance.js").is_file())
             index = (state / "index.html").read_text()
-            self.assertIn("/gallery/app.js?v=3.6.0", index)
+            self.assertIn("/gallery/app.js?v=3.7.0", index)
+            self.assertIn("/gallery/appearance.js?v=3.7.0", index)
             self.assertIn('id="history-link"', index)
             history = (state / "history.html").read_text()
             self.assertIn('id="history-back"', history)
@@ -129,6 +132,7 @@ class BuilderTests(unittest.TestCase):
             self.assertEqual(config["title"], "Remembered Library")
             self.assertEqual(config["source_label"], "Remembered Source")
             self.assertEqual(config["thumbnail_width"], 640)
+            self.assertEqual(config["appearance"], "system")
 
 
 if __name__ == "__main__":

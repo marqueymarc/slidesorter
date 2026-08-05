@@ -13,6 +13,7 @@ import sys
 STATE_DIRECTORY_NAME = ".slidesorterstate"
 STATE_IDENTITY_VERSION = 1
 DEFAULT_PROFILE = "default"
+APPEARANCE_MODES = frozenset({"system", "light", "dark"})
 _PROFILE_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}\Z")
 
 
@@ -40,6 +41,15 @@ def validate_profile(value: str) -> str:
             "Profile must be 1–64 letters, numbers, dots, underscores, or hyphens, and start with a letter or number"
         )
     return profile
+
+
+def validate_appearance(value: object) -> str:
+    """Return a supported persisted appearance choice."""
+
+    appearance = str(value).strip().lower()
+    if appearance not in APPEARANCE_MODES:
+        raise ValueError("Appearance must be System default, Light, or Dark")
+    return appearance
 
 
 def collection_id(media_root: Path) -> str:

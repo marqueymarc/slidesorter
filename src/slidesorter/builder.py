@@ -21,12 +21,14 @@ from .actions import (
     validate_actions,
 )
 from .state import (
+    APPEARANCE_MODES,
     DEFAULT_PROFILE,
     StateCompatibilityError,
     automatic_state_dir,
     ensure_compatible_state,
     platform_state_root,
     state_identity,
+    validate_appearance,
     validate_profile,
 )
 
@@ -42,7 +44,9 @@ VIDEO_EXTENSIONS = {".mov", ".mp4", ".m4v", ".avi", ".mts", ".m2ts", ".3gp", ".m
 PICTURE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".tif", ".tiff", ".bmp"
 }
-ASSET_FILES = ("index.html", "app.css", "app.js", "viewer.html", "history.html", "history.js")
+ASSET_FILES = (
+    "index.html", "app.css", "appearance.js", "app.js", "viewer.html", "history.html", "history.js",
+)
 DEFAULT_HISTORY_RETENTION_DAYS = 90
 
 
@@ -72,6 +76,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Preserve each source-relative path beneath its destination",
     )
     parser.add_argument("--media-mode", choices=("videos", "pictures", "both"))
+    parser.add_argument("--appearance", choices=tuple(sorted(APPEARANCE_MODES)))
     parser.add_argument("--thumbnail-width", type=int)
     parser.add_argument("--thumbnail-policy", choices=("lazy", "eager"))
     parser.add_argument("--workers", type=int)
@@ -233,6 +238,10 @@ def main(argv: list[str] | None = None) -> None:
     title = args.title or str(remembered.get("title", "Media Library"))
     source_label = args.source_label or str(remembered.get("source_label", media_root.name))
     media_mode = args.media_mode or str(remembered.get("media_mode", "both"))
+    try:
+        appearance = validate_appearance(args.appearance or remembered.get("appearance", "system"))
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
     thumbnail_width = args.thumbnail_width or int(remembered.get("thumbnail_width", 720))
     thumbnail_policy = args.thumbnail_policy or str(remembered.get("thumbnail_policy", "lazy"))
     workers = args.workers or int(remembered.get("workers", 4))
@@ -323,6 +332,7 @@ def main(argv: list[str] | None = None) -> None:
         "title": title,
         "source_label": source_label,
         "media_mode": media_mode,
+        "appearance": appearance,
         "actions": [action.public_dict() for action in actions],
         "items": items,
     }
@@ -337,6 +347,7 @@ def main(argv: list[str] | None = None) -> None:
         "keep_structure": keep_structure,
         "history_retention_days": history_retention_days,
         "media_mode": media_mode,
+        "appearance": appearance,
         "thumbnail_width": thumbnail_width,
         "thumbnail_policy": thumbnail_policy,
         "workers": max(1, workers),

@@ -11,6 +11,9 @@ SlideSorter is a local-first media review desk. It scans a directory, builds thu
 
 Your media stays on your machine. The GitHub repository and container image contain no catalog, thumbnails, paths, history, or user data.
 
+The public project site lives in [`site/`](site/). It is static product
+information only; GitHub Pages never receives your media or SlideSorter state.
+
 ## Features
 
 - Browse tens of thousands of pictures and videos with server-backed pagination.
@@ -82,7 +85,7 @@ Upgrade later with `brew update && brew upgrade slidesorter`.
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.6.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.7.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -189,6 +192,10 @@ SlideSorter keeps code and state separate.
 | Source package | Application code and static assets | Yes |
 
 Delete the state directory to discard the catalog and cache. Preserve `action-history.json` while you still need Undo. Settings → Rebuild History checks recorded paths, marks missing media Purged, and prunes Purged records older than the configured retention period (90 days by default). Active Undo records are never age-pruned.
+
+Appearance is saved with each state profile. In Settings, choose **System default**
+to follow the Mac or browser, or lock that gallery profile to **Light** or **Dark**.
+Changing appearance does not rebuild or rescan the collection.
 
 Read [State and privacy](docs/STATE_AND_PRIVACY.md) before automating cleanup.
 

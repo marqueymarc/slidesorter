@@ -136,6 +136,34 @@ class SettingsCompatibilityTests(unittest.TestCase):
             self.assertEqual(settings["removed_root"], str(media / "Removed"))
             self.assertEqual([action["display_label"] for action in settings["actions"]], ["Stage", "Remove"])
             self.assertEqual(settings["history_retention_days"], 90)
+            self.assertEqual(settings["appearance"], "system")
+
+    def test_settings_accept_a_valid_appearance_and_reject_an_unknown_one(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = (root / "media").resolve()
+            state = (root / "state").resolve()
+            media.mkdir()
+            state.mkdir()
+            config = GalleryConfig(
+                media_root=media, gallery_root=state, title="Fixture", source_label="Fixture",
+                actions=(DestinationAction("stage", "Stage", media / "Staged"),), keep_structure=True,
+                history_retention_days=90, media_mode="both", thumbnail_width=720,
+                thumbnail_policy="lazy", workers=1,
+            )
+            settings = {
+                "media_root": str(media),
+                "actions": [{"id": "stage", "label": "Stage", "root": str(media / "Staged")}],
+                "keep_structure": True,
+                "media_mode": "both",
+                "title": "Fixture",
+                "source_label": "Fixture",
+                "appearance": "light",
+            }
+            self.assertEqual(GalleryConfig.from_settings(config, settings).appearance, "light")
+            settings["appearance"] = "sepia"
+            with self.assertRaises(ValueError):
+                GalleryConfig.from_settings(config, settings)
 
     def test_settings_cannot_reassign_an_existing_state_profile_to_another_root(self):
         with tempfile.TemporaryDirectory() as temporary:

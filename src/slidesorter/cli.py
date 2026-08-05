@@ -37,6 +37,7 @@ def run_parser() -> argparse.ArgumentParser:
         help="Preserve source-relative paths beneath destination folders",
     )
     parser.add_argument("--media-mode", choices=("videos", "pictures", "both"))
+    parser.add_argument("--appearance", choices=("system", "light", "dark"))
     parser.add_argument("--thumbnail-width", type=int)
     parser.add_argument("--thumbnail-policy", choices=("lazy", "eager"))
     parser.add_argument("--workers", type=int)
@@ -79,6 +80,7 @@ def run(argv: list[str]) -> None:
     for option, value in (
         ("--title", args.title),
         ("--media-mode", args.media_mode),
+        ("--appearance", args.appearance),
         ("--thumbnail-width", args.thumbnail_width),
         ("--thumbnail-policy", args.thumbnail_policy),
         ("--workers", args.workers),

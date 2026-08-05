@@ -3,9 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light dark">
   <title>SlideSorter</title>
-  <link rel="stylesheet" href="/gallery/app.css?v=3.6.0">
+  <link rel="stylesheet" href="/gallery/app.css?v=3.7.0">
+  <script src="/gallery/appearance.js?v=3.7.0"></script>
 </head>
 <body>
   <div class="shell">
@@ -40,7 +41,7 @@
     </nav>
   </div>
 
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.6.0</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.7.0</footer>
 
   <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div><strong id="bulk-count">0 selected</strong><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></div><div class="bulk-actions" id="bulk-actions"></div></aside>
 
@@ -55,6 +56,7 @@
         <p class="destination-hint">Optional presentation hints can follow a label: <code>Remove (use a red trash can glyph)</code>. SlideSorter recognizes a small built-in vocabulary; it does not send labels to an AI service.</p>
       </section>
       <label class="toggle-field"><input id="keep-structure" name="keep_structure" type="checkbox" checked><span><strong>Keep directory structure</strong><small>Preserve each path beneath its destination. Turn off to move files directly into the destination folder.</small></span></label>
+      <label class="field appearance-field"><span>Appearance</span><small>System default follows this device. Changes apply immediately without rebuilding.</small><select id="appearance" name="appearance"><option value="system">System default</option><option value="light">Light</option><option value="dark">Dark</option></select></label>
       <label class="field"><span>Include</span><small>Choose what the catalog scans.</small><select id="media-mode" name="media_mode"><option value="both">Pictures and videos</option><option value="pictures">Pictures only</option><option value="videos">Videos only</option></select></label>
       <label class="field"><span>Items per page</span><small>Use 100 for a responsive starting point; increase it on a faster Mac.</small><input id="page-capacity" name="page_capacity" type="number" min="25" max="500" step="25" value="100" required></label>
       <details class="advanced"><summary>Display details</summary><label class="field"><span>Collection title</span><input id="gallery-title" name="title" required></label><label class="field"><span>Source label</span><input id="source-label" name="source_label" required></label></details>
@@ -69,6 +71,6 @@
   </aside>
 
   <div class="toast-region" id="toasts" aria-live="polite"></div>
-  <script src="/gallery/app.js?v=3.6.0" defer></script>
+  <script src="/gallery/app.js?v=3.7.0" defer></script>
 </body>
 </html>

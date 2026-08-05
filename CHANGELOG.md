@@ -2,6 +2,21 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.7.0] - 2026-08-05
+
+### Added
+
+- Added persistent System default, Light, and Dark appearance choices. Appearance
+  changes immediately across the gallery, History, and standalone media viewer
+  without rebuilding the catalog.
+- Added a static, local-first product site for GitHub Pages. It contains no
+  catalog, state, history, or private media.
+
+### Changed
+
+- Removed redundant picture/video card badges. Video cards retain their play
+  control, while the configured media filter remains visible in the toolbar.
+
 ## [3.6.0] - 2026-08-04
 
 ### Added
@@ -135,3 +150,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 [3.4.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.4.0
 [3.5.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.5.0
 [3.6.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.6.0
+[3.7.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.7.0
