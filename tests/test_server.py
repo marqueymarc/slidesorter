@@ -11,6 +11,9 @@ from slidesorter.server import (
     DIRECTORY_PROMPTS,
     GalleryConfig,
     GalleryHandler,
+    collection_state_dir,
+    copied_actions,
+    provision_destination_roots,
     history_entry_undo_available,
     inside,
     reconcile_history,
@@ -25,6 +28,15 @@ class DirectoryPickerCompatibilityTests(unittest.TestCase):
             set(DIRECTORY_PROMPTS),
             {"media_root", "action_root", "staged_root", "removed_root"},
         )
+
+    def test_collection_switcher_finds_a_single_named_profile(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "media"
+            state = root / ".slidesorterstate" / "triage"
+            state.mkdir(parents=True)
+            state.joinpath("gallery-config.json").write_text("{}")
+
+            self.assertEqual(collection_state_dir(root), state.resolve())
 
 
 class PathSafetyTests(unittest.TestCase):
@@ -198,6 +210,74 @@ class SettingsCompatibilityTests(unittest.TestCase):
                         "source_label": "Fixture",
                     },
                 )
+
+    def test_new_destination_cannot_adopt_an_existing_media_subtree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = (root / "media").resolve()
+            state = (root / "state").resolve()
+            archive = media / "Archive"
+            archive.mkdir(parents=True)
+            state.mkdir()
+            (archive / "already-there.jpg").write_bytes(b"image")
+            config = GalleryConfig(
+                media_root=media, gallery_root=state, title="Fixture", source_label="Fixture",
+                actions=(DestinationAction("stage", "Stage", media / "Staged"),), keep_structure=True,
+                history_retention_days=90, media_mode="both", thumbnail_width=720,
+                thumbnail_policy="lazy", workers=1,
+            )
+
+            with self.assertRaisesRegex(ValueError, "already contains media"):
+                GalleryConfig.from_settings(
+                    config,
+                    {
+                        "media_root": str(media),
+                        "actions": [
+                            {"id": "stage", "label": "Stage", "root": str(media / "Staged")},
+                            {"id": "archive", "label": "Archive", "root": str(archive)},
+                        ],
+                        "keep_structure": True,
+                        "media_mode": "both",
+                        "title": "Fixture",
+                        "source_label": "Fixture",
+                    },
+                )
+
+    def test_copied_labels_receive_fresh_destination_folders_under_new_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = (root / "new").resolve()
+            destination.mkdir()
+            actions = (
+                DestinationAction("stage", "Stage", root / "old" / "Staged"),
+                DestinationAction("for-mom", "For Mom (green check icon)", root / "old" / "For Mom"),
+            )
+
+            copied = copied_actions(destination, actions)
+
+            self.assertEqual([action.label for action in copied], [action.label for action in actions])
+            self.assertEqual([action.root for action in copied], [destination / "Stage", destination / "For Mom"])
+
+    def test_new_destination_folder_is_created_and_verified(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "For Mom"
+            actions = (DestinationAction("for-mom", "For Mom", destination),)
+
+            created = provision_destination_roots((), actions)
+
+            self.assertEqual(created, [destination])
+            self.assertTrue(destination.is_dir())
+
+    def test_new_destination_rejects_a_file_conflict(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            destination = root / "For Mom"
+            destination.write_text("not a folder")
+            actions = (DestinationAction("for-mom", "For Mom", destination),)
+
+            with self.assertRaisesRegex(ValueError, "conflicts with an existing file"):
+                provision_destination_roots((), actions)
 
 
 class HistoryMediaTests(unittest.TestCase):

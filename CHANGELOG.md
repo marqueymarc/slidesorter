@@ -2,6 +2,29 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.8.0] - 2026-08-05
+
+### Added
+
+- Added collection-local destinations, Undo history, thumbnails, and catalog state
+  with a small path-only recent-collection index for fast reopening.
+- Added configurable ordered destination labels, with the first two as direct card
+  actions and later labels under More.
+- Added selection-aware bulk actions, page and all-results selection, modifier
+  selection, unique label shortcuts, and selection continuity through the media viewer.
+
+### Changed
+
+- Made `slidesorter run` without a media root resume the latest compatible
+  collection; an explicit root still opens that collection.
+- Simplified collection switching to a folder chooser and clickable recent
+  collections.
+
+### Fixed
+
+- Restored selections when a media viewer opens a fresh SlideSorter gallery tab.
+- Preserved selections when closing inline video playback with Escape.
+
 ## [3.7.0] - 2026-08-05
 
 ### Added
@@ -151,3 +174,4 @@ All notable changes appear here. SlideSorter follows semantic versioning.
 [3.5.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.5.0
 [3.6.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.6.0
 [3.7.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.7.0
+[3.8.0]: https://github.com/marqueymarc/slidesorter/releases/tag/v3.8.0

@@ -85,7 +85,7 @@ Upgrade later with `brew update && brew upgrade slidesorter`.
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.7.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.8.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -220,7 +220,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.6.0
+  ghcr.io/marqueymarc/slidesorter:3.8.0
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.

@@ -11,6 +11,7 @@ import sys
 
 
 STATE_DIRECTORY_NAME = ".slidesorterstate"
+COLLECTION_REGISTRY_NAME = "recent-collections.json"
 STATE_IDENTITY_VERSION = 1
 DEFAULT_PROFILE = "default"
 APPEARANCE_MODES = frozenset({"system", "light", "dark"})
@@ -73,6 +74,61 @@ def automatic_state_dir(media_root: Path, profile: str) -> Path:
     except OSError:
         return fallback_state_dir(resolved_media_root, profile)
     return colocated_parent / profile
+
+
+def collection_registry_path() -> Path:
+    """Return the small machine-local index used to reopen collections.
+
+    Collection data stays next to its media root.  This registry records only
+    canonical root paths and last-opened timestamps so the running gallery can
+    offer a collection switcher without making a shared catalog or history.
+    """
+
+    return platform_state_root() / COLLECTION_REGISTRY_NAME
+
+
+def read_collection_registry() -> list[dict[str, str]]:
+    """Return valid recently opened collections, newest first."""
+
+    try:
+        raw = json.loads(collection_registry_path().read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    collections: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        root = entry.get("root")
+        opened_at = entry.get("opened_at")
+        if not isinstance(root, str) or not isinstance(opened_at, str):
+            continue
+        try:
+            resolved = Path(root).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        if not resolved.is_dir() or str(resolved) in seen:
+            continue
+        seen.add(str(resolved))
+        collections.append({"root": str(resolved), "opened_at": opened_at})
+    return sorted(collections, key=lambda entry: entry["opened_at"], reverse=True)
+
+
+def record_collection(media_root: Path, opened_at: str) -> list[dict[str, str]]:
+    """Record an opened collection without storing any collection data globally."""
+
+    resolved = media_root.expanduser().resolve()
+    entries = [entry for entry in read_collection_registry() if entry["root"] != str(resolved)]
+    entries.insert(0, {"root": str(resolved), "opened_at": opened_at})
+    entries = entries[:30]
+    path = collection_registry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(entries, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+    return entries
 
 
 def state_identity(media_root: Path, profile: str) -> dict[str, object]:

@@ -8,7 +8,7 @@ import sys
 
 from . import __version__
 from . import builder, server
-from .state import DEFAULT_PROFILE, automatic_state_dir, validate_profile
+from .state import DEFAULT_PROFILE, automatic_state_dir, read_collection_registry, validate_profile
 
 
 def run_parser() -> argparse.ArgumentParser:
@@ -16,7 +16,12 @@ def run_parser() -> argparse.ArgumentParser:
         prog="slidesorter run",
         description="Build a SlideSorter catalog and serve it locally.",
     )
-    parser.add_argument("media_root", type=Path, help="Picture and video directory to review")
+    parser.add_argument(
+        "media_root",
+        type=Path,
+        nargs="?",
+        help="Picture and video directory to review; omit to reopen the last collection",
+    )
     parser.add_argument(
         "--state-dir",
         type=Path,
@@ -51,7 +56,7 @@ def print_help() -> None:
     print(
         "SlideSorter\n\n"
         "Usage:\n"
-        "  slidesorter run MEDIA_ROOT [options]\n"
+        "  slidesorter run [MEDIA_ROOT] [options]\n"
         "  slidesorter build --media-root PATH [options]\n"
         "  slidesorter serve --config PATH [options]\n\n"
         "Run 'slidesorter COMMAND --help' for command-specific options."
@@ -62,16 +67,31 @@ def run(argv: list[str]) -> None:
     args = run_parser().parse_args(argv)
     if args.state_dir is not None and args.profile is not None:
         raise SystemExit("Use either --state-dir or --profile, not both")
+    if args.media_root is None and (args.state_dir is not None or args.profile is not None):
+        raise SystemExit("MEDIA_ROOT is required with --state-dir or --profile")
     try:
         profile = validate_profile(args.profile or DEFAULT_PROFILE)
     except ValueError as error:
         raise SystemExit(str(error)) from error
-    media_root = args.media_root.expanduser().resolve()
-    state_dir = (
-        args.state_dir.expanduser().resolve()
-        if args.state_dir is not None
-        else automatic_state_dir(media_root, profile).resolve()
-    )
+    if args.media_root is None:
+        for entry in read_collection_registry():
+            candidate_root = Path(entry["root"])
+            candidate_state = server.collection_state_dir(candidate_root, DEFAULT_PROFILE)
+            if (candidate_state / "gallery-config.json").is_file():
+                existing = server.GalleryConfig.load(candidate_state / "gallery-config.json")
+                media_root = existing.media_root
+                state_dir = candidate_state
+                profile = existing.state_profile
+                break
+        else:
+            raise SystemExit("No existing collection to reopen. Run 'slidesorter run MEDIA_ROOT' first.")
+    else:
+        media_root = args.media_root.expanduser().resolve()
+        state_dir = (
+            args.state_dir.expanduser().resolve()
+            if args.state_dir is not None
+            else automatic_state_dir(media_root, profile).resolve()
+        )
     build_args = [
         "--media-root", str(media_root),
         "--gallery-root", str(state_dir),
@@ -109,7 +129,10 @@ def run(argv: list[str]) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     arguments = list(sys.argv[1:] if argv is None else argv)
-    if not arguments or arguments[0] in {"-h", "--help"}:
+    if not arguments:
+        run([])
+        return
+    if arguments[0] in {"-h", "--help"}:
         print_help()
         return
     if arguments[0] in {"-V", "--version"}:

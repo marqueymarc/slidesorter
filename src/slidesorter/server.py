@@ -30,7 +30,11 @@ from .builder import DEFAULT_HISTORY_RETENTION_DAYS, thumbnail_for
 from .state import (
     DEFAULT_PROFILE,
     StateCompatibilityError,
+    automatic_state_dir,
     ensure_compatible_state,
+    fallback_state_dir,
+    read_collection_registry,
+    record_collection,
     validate_appearance,
     validate_profile,
 )
@@ -52,6 +56,119 @@ DIRECTORY_PROMPTS = {
     "staged_root": "Choose the Stage directory",
     "removed_root": "Choose the Remove directory",
 }
+
+
+def collection_state_dir(media_root: Path, profile: str = DEFAULT_PROFILE) -> Path:
+    """Find an existing collection state without creating a new directory."""
+
+    root = media_root.expanduser().resolve()
+    colocated = root / ".slidesorterstate" / profile
+    fallback = fallback_state_dir(root, profile)
+    for candidate in (colocated, fallback):
+        if (candidate / "gallery-config.json").is_file():
+            return candidate
+    profile_candidates = []
+    for parent in (root / ".slidesorterstate", fallback.parent):
+        if not parent.is_dir():
+            continue
+        profile_candidates.extend(path.parent for path in parent.glob("*/gallery-config.json"))
+    unique_candidates = sorted(set(profile_candidates))
+    if len(unique_candidates) == 1:
+        return unique_candidates[0]
+    return colocated
+
+
+def copied_destination_name(action: DestinationAction) -> str:
+    """Make a new-root destination name from a visible label without a path escape."""
+
+    display, _, _ = action_presentation(action.label)
+    name = display.replace("/", "-").replace("\\", "-").strip(". ")
+    return name or action.id
+
+
+def copied_actions(media_root: Path, actions: tuple[DestinationAction, ...]) -> tuple[DestinationAction, ...]:
+    """Copy label semantics but deliberately create fresh destination paths."""
+
+    return tuple(
+        DestinationAction(action.id, action.label, (media_root / copied_destination_name(action)).resolve())
+        for action in actions
+    )
+
+
+def first_supported_media(root: Path) -> Path | None:
+    """Return one existing supported file, used before adopting a destination tree."""
+
+    if not root.is_dir():
+        return None
+    for current_text, _, file_names in os.walk(root):
+        current = Path(current_text)
+        for name in file_names:
+            candidate = current / name
+            if candidate.suffix.lower() in MEDIA_EXTENSIONS:
+                return candidate
+    return None
+
+
+def validate_destination_adoption(
+    media_root: Path,
+    gallery_root: Path,
+    previous_actions: tuple[DestinationAction, ...],
+    actions: tuple[DestinationAction, ...],
+) -> None:
+    """Refuse to hide an existing media subtree when a new destination is adopted."""
+
+    previous_roots = {action.root for action in previous_actions}
+    for action in actions:
+        if (
+            action.root == gallery_root
+            or action.root.is_relative_to(gallery_root)
+            or gallery_root.is_relative_to(action.root)
+        ):
+            raise ValueError("A destination cannot overlap SlideSorter’s private state folder")
+        if action.root in previous_roots or not action.root.is_relative_to(media_root):
+            continue
+        existing = first_supported_media(action.root)
+        if existing is not None:
+            display, _, _ = action_presentation(action.label)
+            raise ValueError(
+                f"{display} already contains media ({existing.name}). Choose an empty or new destination folder; "
+                "otherwise those files would be excluded from this collection."
+            )
+
+
+def provision_destination_roots(
+    previous_actions: tuple[DestinationAction, ...],
+    actions: tuple[DestinationAction, ...],
+) -> list[Path]:
+    """Create new destination folders now, so Settings can verify they are usable."""
+
+    existing_roots = {action.root for action in previous_actions}
+    created: list[Path] = []
+    try:
+        for action in actions:
+            if action.root in existing_roots:
+                continue
+            if action.root.exists():
+                if not action.root.is_dir():
+                    display, _, _ = action_presentation(action.label)
+                    raise ValueError(f"{display} conflicts with an existing file: {action.root}")
+                continue
+            action.root.mkdir(parents=True, exist_ok=False)
+            created.append(action.root)
+    except Exception:
+        rollback_provisioned_destination_roots(created)
+        raise
+    return created
+
+
+def rollback_provisioned_destination_roots(created: list[Path]) -> None:
+    """Remove only empty folders this Settings request created."""
+
+    for root in reversed(created):
+        try:
+            root.rmdir()
+        except OSError:
+            pass
 
 
 def validate_roots(media_root: Path, staged_root: Path, removed_root: Path) -> None:
@@ -152,6 +269,7 @@ class GalleryConfig:
                 "This state profile belongs to its current root tree. Start SlideSorter with the new root instead."
             )
         actions = actions_from_raw(media_root, raw.get("actions"))
+        validate_destination_adoption(media_root, current.gallery_root, current.actions, actions)
         mode = str(raw.get("media_mode", ""))
         if mode not in MEDIA_MODES:
             raise ValueError("Include must be Pictures, Videos, or Both")
@@ -821,6 +939,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "version": self.catalog.get("version", 3),
             "title": self.catalog.get("title", self.config.title),
             "source_label": self.catalog.get("source_label", self.config.source_label),
+            "media_root": str(self.config.media_root),
             "media_mode": self.catalog.get("media_mode", self.config.media_mode),
             "actions": [action.public_dict() for action in self.config.actions],
             "keep_structure": self.config.keep_structure,
@@ -871,6 +990,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlsplit(self.path)
         try:
+            if parsed.path == "/api/collections":
+                self.respond_json(HTTPStatus.OK, self.collections_payload())
+                return
             if parsed.path.startswith("/api/history-thumbnail/"):
                 self.serve_history_thumbnail(parsed.path.removeprefix("/api/history-thumbnail/"))
                 return
@@ -923,7 +1045,7 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "/api/reveal", "/api/move", "/api/bulk-move", "/api/refresh",
             "/api/remove", "/api/stage", "/api/bulk-stage", "/api/bulk-remove",
             "/api/settings", "/api/appearance", "/api/undo", "/api/choose-directory", "/api/rebuild-history",
-            "/api/catalog-range",
+            "/api/catalog-range", "/api/collection-status", "/api/switch-collection",
         }
         if action not in allowed:
             self.respond_json(HTTPStatus.NOT_FOUND, {"error": "Unknown action"})
@@ -941,7 +1063,11 @@ class GalleryHandler(SimpleHTTPRequestHandler):
                 self.catalog_range(self.read_json_body())
                 return
             with self.gallery_lock:
-                if action == "/api/settings":
+                if action == "/api/collection-status":
+                    self.collection_status(self.read_json_body())
+                elif action == "/api/switch-collection":
+                    self.switch_collection(self.read_json_body())
+                elif action == "/api/settings":
                     self.save_settings(self.read_json_body())
                 elif action == "/api/appearance":
                     self.save_appearance(self.read_json_body())
@@ -997,13 +1123,124 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             path = path.rstrip("/")
         self.respond_json(HTTPStatus.OK, {"path": path})
 
+    def collection_root_from(self, body: dict[str, object]) -> Path:
+        raw_root = body.get("media_root")
+        if not isinstance(raw_root, str) or not raw_root.strip():
+            raise ValueError("Choose a root tree first")
+        try:
+            root = Path(raw_root).expanduser().resolve()
+        except (OSError, RuntimeError) as error:
+            raise ValueError("The selected root tree cannot be resolved") from error
+        if not root.is_dir():
+            raise ValueError("Root tree is not an existing directory")
+        return root
+
+    def collections_payload(self) -> dict[str, object]:
+        active = str(self.config.media_root)
+        entries = [{"root": active, "active": True}]
+        seen = {active}
+        for entry in read_collection_registry():
+            root = entry["root"]
+            if root in seen:
+                continue
+            seen.add(root)
+            entries.append({"root": root, "active": False, "opened_at": entry["opened_at"]})
+        return {"active_root": active, "collections": entries}
+
+    def collection_status(self, body: dict[str, object]) -> None:
+        root = self.collection_root_from(body)
+        state_dir = collection_state_dir(root)
+        config_path = state_dir / "gallery-config.json"
+        if config_path.is_file():
+            target = GalleryConfig.load(config_path)
+            self.respond_json(
+                HTTPStatus.OK,
+                {
+                    "status": "existing",
+                    "root": str(root),
+                    "state_dir": str(state_dir),
+                    "title": target.title,
+                    "source_label": target.source_label,
+                    "same_collection": root == self.config.media_root,
+                },
+            )
+            return
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "status": "new",
+                "root": str(root),
+                "state_dir": str(state_dir),
+                "same_collection": root == self.config.media_root,
+            },
+        )
+
+    def new_collection_config(self, root: Path, copy_labels: bool) -> GalleryConfig:
+        gallery_root = automatic_state_dir(root, DEFAULT_PROFILE).resolve()
+        actions = copied_actions(root, self.config.actions) if copy_labels else legacy_actions(root)
+        validate_destination_adoption(root, gallery_root, (), actions)
+        root_label = root.name or str(root)
+        return GalleryConfig(
+            media_root=root,
+            gallery_root=gallery_root,
+            title=root_label,
+            source_label=root_label,
+            actions=actions,
+            keep_structure=self.config.keep_structure,
+            history_retention_days=self.config.history_retention_days,
+            media_mode=self.config.media_mode,
+            thumbnail_width=self.config.thumbnail_width,
+            thumbnail_policy=self.config.thumbnail_policy,
+            workers=self.config.workers,
+            state_profile=DEFAULT_PROFILE,
+            appearance=self.config.appearance,
+        )
+
+    def switch_collection(self, body: dict[str, object]) -> None:
+        root = self.collection_root_from(body)
+        state_dir = collection_state_dir(root)
+        config_path = state_dir / "gallery-config.json"
+        created = not config_path.is_file()
+        created_destination_roots: list[Path] = []
+        if created:
+            target = self.new_collection_config(root, bool(body.get("copy_labels", True)))
+            created_destination_roots = provision_destination_roots((), target.actions)
+            succeeded, detail = self.run_rebuild(target)
+            if not succeeded:
+                rollback_provisioned_destination_roots(created_destination_roots)
+                raise RuntimeError(detail or "The new collection could not be created")
+            config_path = target.gallery_root / "gallery-config.json"
+        target = GalleryConfig.load(config_path)
+        backfill_history_thumbnails(target)
+        catalog = load_catalog(target)
+        self.server.config_path = config_path  # type: ignore[attr-defined]
+        self.server.gallery_config = target  # type: ignore[attr-defined]
+        self.server.catalog = catalog  # type: ignore[attr-defined]
+        try:
+            record_collection(target.media_root, datetime.now().astimezone().isoformat())
+        except OSError:
+            pass
+        self.respond_json(
+            HTTPStatus.OK,
+            {
+                "created": created,
+                "created_destination_roots": [str(path) for path in created_destination_roots],
+                "settings": target.public_settings(),
+                "collections": self.collections_payload(),
+            },
+        )
+
     def save_settings(self, body: dict[str, object]) -> None:
         new_config = GalleryConfig.from_settings(self.config, body)
+        created_roots = provision_destination_roots(self.config.actions, new_config.actions)
         succeeded, detail = self.run_rebuild(new_config)
         if not succeeded:
+            rollback_provisioned_destination_roots(created_roots)
             raise RuntimeError(detail or "The catalog rebuild failed; settings were not changed")
         self.reload_runtime()
-        self.respond_json(HTTPStatus.OK, self.config.public_settings())
+        payload = self.config.public_settings()
+        payload["created_destination_roots"] = [str(root) for root in created_roots]
+        self.respond_json(HTTPStatus.OK, payload)
 
     def save_appearance(self, body: dict[str, object]) -> None:
         appearance = validate_appearance(body.get("appearance", ""))
@@ -1362,6 +1599,10 @@ def main(argv: list[str] | None = None) -> None:
     server.gallery_lock = threading.RLock()  # type: ignore[attr-defined]
     server.thumbnail_lock = threading.RLock()  # type: ignore[attr-defined]
     server.catalog = load_catalog(config)  # type: ignore[attr-defined]
+    try:
+        record_collection(config.media_root, datetime.now().astimezone().isoformat())
+    except OSError:
+        pass
     print(f"Serving {config.title} at http://{args.host}:{args.port}/gallery/", flush=True)
     print(f"Media root: {config.media_root}", flush=True)
     try:

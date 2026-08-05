@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -9,8 +10,11 @@ from slidesorter.state import (
     StateCompatibilityError,
     automatic_state_dir,
     collection_id,
+    collection_registry_path,
     ensure_compatible_state,
     fallback_state_dir,
+    read_collection_registry,
+    record_collection,
     state_identity,
     validate_profile,
 )
@@ -47,6 +51,22 @@ class StatePathTests(unittest.TestCase):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 validate_profile(invalid)
         self.assertEqual(validate_profile("Review_2026-08"), "Review_2026-08")
+
+    def test_recent_collection_registry_tracks_paths_not_collection_contents(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            first = root / "first"
+            second = root / "second"
+            first.mkdir()
+            second.mkdir()
+            with patch.dict(os.environ, {"SLIDESORTER_STATE_DIR": str(root / "app-state")}, clear=False):
+                record_collection(first, "2026-08-05T10:00:00+00:00")
+                record_collection(second, "2026-08-05T11:00:00+00:00")
+                entries = read_collection_registry()
+                raw = json.loads(collection_registry_path().read_text())
+
+            self.assertEqual([entry["root"] for entry in entries], [str(second.resolve()), str(first.resolve())])
+            self.assertEqual(raw[0], {"root": str(second.resolve()), "opened_at": "2026-08-05T11:00:00+00:00"})
 
 
 class StateCompatibilityTests(unittest.TestCase):

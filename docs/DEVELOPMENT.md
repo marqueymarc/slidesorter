@@ -53,7 +53,7 @@ python -m build
 Inspect wheel contents:
 
 ```sh
-python -m zipfile -l dist/slidesorter-3.6.0-py3-none-any.whl
+python -m zipfile -l dist/slidesorter-3.8.0-py3-none-any.whl
 ```
 
 Confirm all six browser assets are packaged.
