@@ -1,6 +1,9 @@
 const galleryReturnKey = "slidesorter-gallery-return";
 const galleryRestoreKey = "slidesorter-gallery-restore";
 const gallerySelectionPrefix = "slidesorter-gallery-selection:";
+const galleryThumbnailSizePrefix = "slidesorter-gallery-thumbnail-size:";
+const defaultThumbnailSize = 280;
+const reservedShortcuts = new Set(["u"]);
 const galleryLocation = new URL(location.href);
 const returnedSelectionToken = galleryLocation.searchParams.get("return_token");
 let restoredSelection = null;
@@ -29,8 +32,10 @@ const state = {
   page: Math.max(1, Number.parseInt(restoredView?.page, 10) || 1), pageSize: initialPageSize,
   requestNumber: 0, selectionAll: false, allCriteria: null,
   selectedIds: new Set(), excludedIds: new Set(), lastSelectedId: null,
+  activeTileId: null, popoverItemId: null,
   selectionToken: returnedSelectionToken || crypto.randomUUID(),
   appearance: "system", collectionRoot: null, collectionPending: null, collectionActions: [], bulkMoving: false,
+  thumbnailSize: defaultThumbnailSize, thumbnailRoot: null,
 };
 const gallery = document.querySelector("#gallery");
 const search = document.querySelector("#search");
@@ -46,6 +51,9 @@ const nextPage = document.querySelector("#page-next");
 const selectPage = document.querySelector("#select-page");
 const selectAll = document.querySelector("#select-all");
 const bulkBar = document.querySelector("#bulk-bar");
+const bulkActions = document.querySelector("#bulk-actions");
+const thumbnailSize = document.querySelector("#thumbnail-size");
+const itemActionPopover = document.querySelector("#item-action-popover");
 const pageNumber = document.querySelector("#page-number");
 const pageTotal = document.querySelector("#page-total");
 const destinationList = document.querySelector("#destination-list");
@@ -53,6 +61,46 @@ pageSize.value = String(state.pageSize);
 search.value = state.query;
 sort.value = state.sort;
 document.querySelectorAll(".kind-option").forEach(option => option.classList.toggle("active", option.dataset.kind === state.kind));
+
+function normalizedThumbnailSize(value) {
+  return Math.max(160, Math.min(440, Math.round(Number(value || defaultThumbnailSize) / 10) * 10));
+}
+
+function applyThumbnailSize(value, persist = true) {
+  state.thumbnailSize = normalizedThumbnailSize(value);
+  document.documentElement.style.setProperty("--thumbnail-size", `${state.thumbnailSize}px`);
+  document.documentElement.style.setProperty("--gallery-gap", `${Math.round(8 + (state.thumbnailSize - 160) * .055)}px`);
+  thumbnailSize.value = String(state.thumbnailSize);
+  if (persist && state.catalog?.media_root) {
+    localStorage.setItem(`${galleryThumbnailSizePrefix}${state.catalog.media_root}`, String(state.thumbnailSize));
+  }
+}
+
+let thumbnailResizeFrame = null;
+let pendingThumbnailSize = defaultThumbnailSize;
+let thumbnailResizeTimer = null;
+
+function animateThumbnailSize(value) {
+  pendingThumbnailSize = normalizedThumbnailSize(value);
+  if (thumbnailResizeFrame !== null) return;
+  thumbnailResizeFrame = requestAnimationFrame(() => {
+    thumbnailResizeFrame = null;
+    applyThumbnailSize(pendingThumbnailSize);
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    gallery.classList.add("size-settling");
+    clearTimeout(thumbnailResizeTimer);
+    thumbnailResizeTimer = setTimeout(() => {
+      gallery.classList.remove("size-settling");
+    }, 160);
+  });
+}
+
+function restoreThumbnailSize(root) {
+  const saved = Number(localStorage.getItem(`${galleryThumbnailSizePrefix}${root}`));
+  applyThumbnailSize(saved || defaultThumbnailSize, false);
+}
+
+applyThumbnailSize(defaultThumbnailSize, false);
 
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
 
@@ -85,10 +133,12 @@ const iconPaths = {
   trash: '<path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/>',
   tray: '<path d="M12 15V3m0 0L7 8m5-5 5 5M4 14v6h16v-6"/>',
   archive: '<path d="M4 7h16v13H4zM3 4h18v3H3zm6 8h6"/>',
+  folder: '<path d="M3.5 6.5h6l2 2h9v9.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="M3.5 8.5h17"/>',
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/>',
   check: '<path d="m4 12 5 5L20 6"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
   arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+  tag: '<path d="m20 13-7 7-9-9V4h7z"/><circle cx="8.5" cy="8.5" r="1"/>',
 };
 
 function iconMarkup(icon) {
@@ -129,27 +179,100 @@ function shortcutInitial(action) {
   return [...String(action?.display_label || action?.label || "")].find(character => /[\p{L}\p{N}]/u.test(character))?.toLocaleLowerCase() || "";
 }
 
+function normalizedShortcut(value) {
+  const shortcut = String(value || "").trim();
+  return [...shortcut].length === 1 && /[\p{L}\p{N}]/u.test(shortcut) ? shortcut.toLocaleLowerCase() : "";
+}
+
+function suggestedShortcutForAction(action, actions = []) {
+  const configured = normalizedShortcut(action?.shortcut);
+  if (configured && !reservedShortcuts.has(configured)) return configured;
+  const initial = shortcutInitial(action);
+  if (!initial || reservedShortcuts.has(initial)) return "";
+  const matchingLabels = actions.filter(candidate => shortcutInitial(candidate) === initial).length;
+  const claimed = actions.some(candidate => normalizedShortcut(candidate?.shortcut) === initial);
+  return matchingLabels === 1 && !claimed ? initial : "";
+}
+
 function shortcutForAction(action) {
-  const key = shortcutInitial(action);
-  if (!key) return "";
-  const matches = (state.catalog?.actions || []).filter(candidate => shortcutInitial(candidate) === key);
-  return matches.length === 1 ? key : "";
+  return suggestedShortcutForAction(action, state.catalog?.actions || []);
 }
 
 function actionShortcutMarkup(action, showShortcut) {
   const key = showShortcut ? shortcutForAction(action) : "";
-  return key ? `<kbd class="action-shortcut" title="Press ${escapeHtml(key.toUpperCase())} while items are selected">${escapeHtml(key.toUpperCase())}</kbd>` : "";
+  return key ? `<kbd class="action-shortcut" title="Shortcut: ${escapeHtml(key.toUpperCase())}">${escapeHtml(key.toUpperCase())}</kbd>` : "";
 }
 
-function actionButtonMarkup(action, extraClass = "", showShortcut = false) {
+function actionButtonMarkup(action, extraClass = "", showShortcut = false, customTitle = "") {
   const key = showShortcut ? shortcutForAction(action) : "";
-  const title = key ? `Move to ${action.display_label} · press ${key.toUpperCase()} while items are selected` : `Move to ${action.display_label}`;
+  const title = customTitle || (key ? `Move to ${action.display_label} · shortcut ${key.toUpperCase()}` : `Move to ${action.display_label}`);
   return `<button class="action move-action tone-${escapeHtml(action.tone)} ${extraClass}" type="button" data-action-id="${escapeHtml(action.id)}" title="${escapeHtml(title)}">${iconMarkup(action.icon)}<span>${escapeHtml(action.display_label)}</span>${actionShortcutMarkup(action, showShortcut)}</button>`;
 }
 
 function overflowMarkup(actions, extraClass = "", showShortcut = false) {
   if (!actions.length) return "";
   return `<div class="action-menu-wrap ${extraClass}"><button class="action more-actions" type="button" aria-haspopup="menu" aria-expanded="false">More <span aria-hidden="true">⌄</span></button><div class="action-menu" role="menu" hidden>${actions.map(action => `<button class="action-menu-item move-action tone-${escapeHtml(action.tone)}" type="button" role="menuitem" data-action-id="${escapeHtml(action.id)}">${iconMarkup(action.icon)}<span>${escapeHtml(action.display_label)}</span>${actionShortcutMarkup(action, showShortcut)}</button>`).join("")}</div></div>`;
+}
+
+let bulkActionLayoutFrame = null;
+
+function renderBulkActions(actions) {
+  bulkActions.innerHTML = actions.map(action => actionButtonMarkup(action, "", true)).join("");
+  if (!actions.length || bulkBar.hidden) return;
+  if (bulkActionLayoutFrame !== null) cancelAnimationFrame(bulkActionLayoutFrame);
+  bulkActionLayoutFrame = requestAnimationFrame(() => fitBulkActions(actions));
+}
+
+function fitBulkActions(actions) {
+  bulkActionLayoutFrame = null;
+  if (bulkBar.hidden || !actions.length) return;
+  const gap = Number.parseFloat(getComputedStyle(bulkActions).gap) || 8;
+  const widths = [...bulkActions.querySelectorAll(":scope > .move-action")].map(button => button.getBoundingClientRect().width);
+  const available = bulkActions.clientWidth;
+  if (!available || widths.reduce((sum, width) => sum + width, 0) + Math.max(0, widths.length - 1) * gap <= available) return;
+
+  bulkActions.innerHTML = actions.map(action => actionButtonMarkup(action, "", true)).join("")
+    + overflowMarkup([actions.at(-1)], "bulk-overflow", true);
+  const moreWidth = bulkActions.querySelector(".more-actions").getBoundingClientRect().width;
+  let visible = 0;
+  let used = 0;
+  for (let index = 0; index < actions.length - 1; index += 1) {
+    const next = used + (visible ? gap : 0) + widths[index];
+    if (next + gap + moreWidth > available) break;
+    used = next;
+    visible += 1;
+  }
+  visible = Math.max(1, visible);
+  bulkActions.innerHTML = actions.slice(0, visible).map(action => actionButtonMarkup(action, "", true)).join("")
+    + overflowMarkup(actions.slice(visible), "bulk-overflow", true);
+}
+
+function tintCardFromPoster(card, image) {
+  if (!image.naturalWidth || card.dataset.tinted) return;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 4;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0, 4, 4);
+    const pixels = context.getImageData(0, 0, 4, 4).data;
+    let red = 0; let green = 0; let blue = 0; let count = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      if (pixels[index + 3] < 128) continue;
+      red += pixels[index]; green += pixels[index + 1]; blue += pixels[index + 2]; count += 1;
+    }
+    if (!count) return;
+    card.style.setProperty("--card-tint", `${Math.round(red / count)} ${Math.round(green / count)} ${Math.round(blue / count)}`);
+    card.dataset.tinted = "true";
+  } catch { /* A poster that cannot be sampled keeps the neutral card tone. */ }
+}
+
+function applyCardTints() {
+  gallery.querySelectorAll(".card .poster").forEach(image => {
+    const card = image.closest(".card");
+    if (!card) return;
+    if (image.complete) tintCardFromPoster(card, image);
+    else image.addEventListener("load", () => tintCardFromPoster(card, image), { once: true });
+  });
 }
 
 function toast(message, options = {}) {
@@ -244,6 +367,26 @@ function viewerUrl(item) {
   return `${url.pathname}${url.search}`;
 }
 
+function singleSelectedItem() {
+  if (selectedCount() !== 1) return null;
+  return state.catalog?.items.find(isSelected) || null;
+}
+
+function openSingleSelectedItem() {
+  const item = singleSelectedItem();
+  if (!item) return;
+  window.open(viewerUrl(item), "_blank", "noopener");
+  toast(`Opened ${item.name}`);
+}
+
+function revealSingleSelectedItem() {
+  const item = singleSelectedItem();
+  if (!item) return;
+  jsonRequest("/api/reveal", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }),
+  }).then(() => toast(`Revealed ${item.name} in Finder`)).catch(error => toast(error.message, { error: true }));
+}
+
 function setItemSelected(item, selected) {
   if (matchesAllCriteria(item)) {
     selected ? state.excludedIds.delete(item.id) : state.excludedIds.add(item.id);
@@ -318,9 +461,16 @@ function selectionPayload() {
 function updateSelectionUI() {
   if (!state.catalog) return;
   const count = selectedCount();
+  if (count > 0) {
+    closeItemActionPopover();
+    setActiveTile(null);
+  }
   bulkBar.hidden = count === 0;
   document.body.classList.toggle("selection-active", count > 0);
+  if (count === 0) document.body.classList.remove("selection-top-revealed");
   document.querySelector("#bulk-count").textContent = `${count.toLocaleString()} selected`;
+  const actions = state.catalog.actions || [];
+  renderBulkActions(actions);
   const pageItems = state.catalog.items;
   const pageSelected = pageItems.length > 0 && pageItems.every(isSelected);
   selectPage.textContent = pageSelected ? "Deselect page" : "Select all on page";
@@ -348,20 +498,33 @@ function updateSummary() {
   document.querySelector("#pagination").hidden = result.filtered_total === 0;
 }
 
+function setActiveTile(card) {
+  const target = selectedCount() === 0 && card?.classList.contains("card") ? card : null;
+  state.activeTileId = target?.dataset.id || null;
+  document.querySelectorAll(".card.shortcut-target").forEach(candidate => candidate.classList.toggle("shortcut-target", candidate === target));
+}
+
+function setPopoverTarget(card) {
+  const target = card?.classList.contains("card") ? card : null;
+  state.popoverItemId = target?.dataset.id || null;
+  document.querySelectorAll(".card.action-popover-anchor").forEach(candidate => candidate.classList.toggle("action-popover-anchor", candidate === target));
+}
+
+function targetedItemForShortcut() {
+  if (selectedCount() > 0) return null;
+  const targetId = state.popoverItemId || state.activeTileId;
+  return targetId ? state.catalog?.items?.find(item => item.id === targetId) || null : null;
+}
+
 function cardMarkup(item, index) {
   const selected = isSelected(item);
   const thumb = `<img class="poster" src="${escapeHtml(item.thumbnail_url)}" alt="Thumbnail for ${escapeHtml(item.name)}" loading="lazy">`;
   const play = item.kind === "video" ? `<button class="play-here" type="button" aria-label="Play ${escapeHtml(item.name)} here" title="Play here"></button>` : "";
-  const verb = item.kind === "video" ? "Play in new tab" : "Open photo";
   const viewer = viewerUrl(item);
-  const actions = state.catalog.actions || [];
-  const directActions = actions.slice(0, 2).map(action => actionButtonMarkup(action, "", true)).join("");
-  const moreActions = overflowMarkup(actions.slice(2), "", true);
+  const folder = String(item.folder || state.catalog.source_label || "");
   return `<article class="card ${selected ? "selected" : ""}" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 12) * 18}ms">
-    <div class="preview"><a class="preview-link viewer-link" href="${escapeHtml(viewer)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(item.name)} in a new tab">${thumb}</a>${play}<label class="card-select" title="Select ${escapeHtml(item.name)}"><input class="card-checkbox" type="checkbox" ${selected ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></label></div>
-    <div class="card-body"><h2 class="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h2><p class="folder" title="${escapeHtml(item.folder)}">${escapeHtml(item.folder || state.catalog.source_label)}</p><div class="metadata"><span>${escapeHtml(item.size_label)}</span><span>${escapeHtml(item.modified_label)}</span></div>
-      <div class="actions"><div class="action-row"><a class="action primary viewer-link" href="${escapeHtml(viewer)}" target="_blank" rel="noopener">↗ ${verb}</a><button class="action secondary reveal" type="button">Finder</button></div><div class="action-row file-row destination-actions">${directActions}${moreActions}</div></div>
-    </div></article>`;
+    <div class="preview"><a class="preview-link viewer-link" href="${escapeHtml(viewer)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(item.name)} in a new tab">${thumb}</a>${play}<label class="card-select" title="Select ${escapeHtml(item.name)}"><input class="card-checkbox" type="checkbox" ${selected ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></label><button class="tile-actions-trigger" type="button" aria-haspopup="menu" aria-controls="item-action-popover" aria-expanded="false" aria-label="Show destination actions for ${escapeHtml(item.name)}" title="Show destination actions"><span aria-hidden="true">…</span></button></div>
+    <div class="card-body"><div class="card-heading"><h2 class="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h2><div class="metadata"><span>${escapeHtml(item.size_label)}</span><span>${escapeHtml(item.modified_label)}</span></div></div><p class="folder" title="${escapeHtml(folder)}">${iconMarkup("folder")}${escapeHtml(folder)}</p><div class="card-utility-actions"><a class="item-action viewer-link" href="${escapeHtml(viewer)}" target="_blank" rel="noopener" title="Open in a new tab · ⇧O with one item selected">↗ Open <kbd class="item-shortcut">⇧O</kbd></a><button class="item-action reveal" type="button" title="Reveal in Finder · ⇧F with one item selected">Finder <kbd class="item-shortcut">⇧F</kbd></button></div></div></article>`;
 }
 
 function stopActivePlayer() {
@@ -373,6 +536,7 @@ function stopActivePlayer() {
 
 function render() {
   if (!state.catalog) return;
+  closeItemActionPopover();
   stopActivePlayer();
   const items = state.catalog.items;
   let emptyMessage = "No media matches this view.";
@@ -382,6 +546,7 @@ function render() {
   if (state.kind === "picture" && state.catalog.media_mode === "videos") emptyMessage = `Pictures are not in the current catalog. <button class="button empty-settings" type="button">Change Settings</button>`;
   if (state.kind === "video" && state.catalog.media_mode === "pictures") emptyMessage = `Videos are not in the current catalog. <button class="button empty-settings" type="button">Change Settings</button>`;
   gallery.innerHTML = items.length ? items.map(cardMarkup).join("") : `<div class="empty">${emptyMessage}</div>`;
+  applyCardTints();
   updateSummary();
   updateSelectionUI();
 }
@@ -446,6 +611,23 @@ async function jsonRequest(url, options = {}) {
   return result;
 }
 
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+  const helper = document.createElement("textarea");
+  helper.value = value;
+  helper.setAttribute("readonly", "");
+  helper.style.position = "fixed";
+  helper.style.opacity = "0";
+  document.body.append(helper);
+  helper.select();
+  const copied = document.execCommand("copy");
+  helper.remove();
+  if (!copied) throw new Error("Could not copy the update command");
+}
+
 async function loadCatalog(announce = false, transition = null) {
   const requestNumber = ++state.requestNumber;
   const parameters = new URLSearchParams({
@@ -457,6 +639,10 @@ async function loadCatalog(announce = false, transition = null) {
     if (requestNumber !== state.requestNumber) return;
     state.catalog = result;
     state.collectionRoot = result.media_root || state.collectionRoot;
+    if (result.media_root && state.thumbnailRoot !== result.media_root) {
+      state.thumbnailRoot = result.media_root;
+      restoreThumbnailSize(result.media_root);
+    }
     restoreSelectionForCatalog();
     state.page = result.page;
     title.textContent = result.title;
@@ -509,28 +695,10 @@ async function undo(token = null) {
   } catch (error) { toast(error.message, { error: true }); }
 }
 
-async function performMove(action, item, button, card) {
-  closeActionMenus();
-  button.disabled = true;
-  const transition = captureGalleryTransition(new Set([item.id]));
-  try {
-    const result = await jsonRequest("/api/move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id, action_id: action.id }) });
-    await fadeDepartures(transition);
-    if (isSelected(item)) setItemSelected(item, false);
-    await loadCatalog(false, transition);
-    undoLast.disabled = false;
-    toast(result.warning || `${item.name} moved to ${result.destination_label || action.display_label}`, {
-      error: Boolean(result.warning), thumbnail: result.thumbnail_url,
-      actionLabel: "Undo", onAction: () => undo(result.token), duration: 12000,
-    });
-  } catch (error) {
-    button.disabled = false;
-    toast(error.message, { error: true });
-  }
-}
-
 async function performBulkMove(action) {
   closeActionMenus();
+  closeItemActionPopover();
+  setActiveTile(null);
   const count = selectedCount();
   if (!count || state.bulkMoving) return;
   state.bulkMoving = true;
@@ -584,11 +752,13 @@ function newActionId() {
   return `action-${crypto.randomUUID().replaceAll("-", "")}`;
 }
 
-function destinationRowMarkup(action) {
+function destinationRowMarkup(action, actions = []) {
   const presentation = action.display_label ? action : actionPresentation(action.label);
+  const shortcut = normalizedShortcut(action.shortcut) || suggestedShortcutForAction(action, actions);
   return `<article class="destination-row" data-action-id="${escapeHtml(action.id || newActionId())}" data-root-mode="${escapeHtml(action.root_mode || "custom")}">
-    <div class="destination-row-head"><span class="destination-order"></span><span class="destination-placement"></span><span class="destination-preview tone-${escapeHtml(presentation.tone)}">${iconMarkup(presentation.icon)}<strong>${escapeHtml(presentation.display_label)}</strong></span><div class="destination-order-actions"><button class="mini-button destination-up" type="button" aria-label="Move destination up">↑</button><button class="mini-button destination-down" type="button" aria-label="Move destination down">↓</button><button class="mini-button destination-delete" type="button" aria-label="Remove destination">×</button></div></div>
+    <div class="destination-row-head"><span class="destination-order"></span><span class="destination-preview tone-${escapeHtml(presentation.tone)}">${iconMarkup(presentation.icon)}<strong>${escapeHtml(presentation.display_label)}</strong></span><div class="destination-order-actions"><button class="mini-button destination-up" type="button" aria-label="Move destination up">↑</button><button class="mini-button destination-down" type="button" aria-label="Move destination down">↓</button><button class="mini-button destination-delete" type="button" aria-label="Remove destination">×</button></div></div>
     <label class="compact-field"><span>Button label</span><input class="destination-label" value="${escapeHtml(action.label || "")}" maxlength="120" placeholder="Review later (blue clock icon)" required></label>
+    <label class="compact-field destination-shortcut-field"><span>Shortcut key</span><input class="destination-shortcut" value="${escapeHtml(shortcut)}" maxlength="1" inputmode="text" autocomplete="off" spellcheck="false" placeholder="None" title="One letter or number; leave blank for no shortcut"></label>
     <label class="compact-field"><span>Destination folder</span><span class="path-control"><input class="destination-root" value="${escapeHtml(action.root || "")}" required><button class="choose" type="button" data-choose="action_root">Choose…</button></span></label>
   </article>`;
 }
@@ -597,8 +767,6 @@ function refreshDestinationRows() {
   const rows = [...destinationList.querySelectorAll(".destination-row")];
   rows.forEach((row, index) => {
     row.querySelector(".destination-order").textContent = String(index + 1).padStart(2, "0");
-    row.querySelector(".destination-placement").textContent = index < 2 ? "Card button" : "More menu";
-    row.classList.toggle("card-destination", index < 2);
     row.querySelector(".destination-up").disabled = index === 0;
     row.querySelector(".destination-down").disabled = index === rows.length - 1;
     row.querySelector(".destination-delete").disabled = rows.length === 1;
@@ -610,7 +778,7 @@ function refreshDestinationRows() {
 }
 
 function renderDestinationEditor(actions) {
-  destinationList.innerHTML = actions.map(destinationRowMarkup).join("");
+  destinationList.innerHTML = actions.map(action => destinationRowMarkup(action, actions)).join("");
   refreshDestinationRows();
 }
 
@@ -622,11 +790,13 @@ function configuredDestinations(config) {
       id: "stage",
       label: "Stage",
       root: config.staged_root || `${mediaRoot}/Staged`,
+      shortcut: "",
     },
     {
       id: "remove",
       label: "Remove (use a red trash can glyph)",
       root: config.removed_root || `${mediaRoot}/Removed`,
+      shortcut: "",
     },
   ];
 }
@@ -636,6 +806,7 @@ function collectDestinationActions() {
     id: row.dataset.actionId,
     label: row.querySelector(".destination-label").value.trim(),
     root: row.querySelector(".destination-root").value.trim(),
+    shortcut: row.querySelector(".destination-shortcut").value.trim(),
   }));
 }
 
@@ -823,6 +994,7 @@ function configuredAction(actionId) {
 
 function actionForShortcut(key) {
   const candidate = String(key || "").toLocaleLowerCase();
+  if (reservedShortcuts.has(candidate)) return null;
   const matches = (state.catalog?.actions || []).filter(action => shortcutForAction(action) === candidate);
   return matches.length === 1 ? matches[0] : null;
 }
@@ -831,9 +1003,63 @@ function closeActionMenus(except = null) {
   document.querySelectorAll(".action-menu-wrap.open").forEach(wrapper => {
     if (wrapper === except) return;
     wrapper.classList.remove("open");
+    wrapper.closest(".card")?.classList.remove("action-menu-open");
     wrapper.querySelector(".action-menu").hidden = true;
     wrapper.querySelector(".more-actions").setAttribute("aria-expanded", "false");
   });
+}
+
+let itemActionTrigger = null;
+
+function closeItemActionPopover({ restoreFocus = false } = {}) {
+  const trigger = itemActionTrigger;
+  if (trigger) trigger.setAttribute("aria-expanded", "false");
+  itemActionTrigger = null;
+  itemActionPopover.hidden = true;
+  itemActionPopover.replaceChildren();
+  itemActionPopover.style.removeProperty("left");
+  itemActionPopover.style.removeProperty("top");
+  setPopoverTarget(null);
+  if (restoreFocus && trigger?.isConnected) trigger.focus();
+}
+
+function positionItemActionPopover(trigger) {
+  const margin = 12;
+  const gap = 8;
+  const triggerRect = trigger.getBoundingClientRect();
+  const popoverRect = itemActionPopover.getBoundingClientRect();
+  const maximumLeft = Math.max(margin, window.innerWidth - popoverRect.width - margin);
+  const left = Math.min(maximumLeft, Math.max(margin, triggerRect.right - popoverRect.width));
+  const below = triggerRect.bottom + gap;
+  const above = triggerRect.top - popoverRect.height - gap;
+  const top = below + popoverRect.height <= window.innerHeight - margin
+    ? below
+    : Math.max(margin, above);
+  itemActionPopover.style.left = `${Math.round(left)}px`;
+  itemActionPopover.style.top = `${Math.round(top)}px`;
+}
+
+function openItemActionPopover(trigger, item, focusFirstAction = false) {
+  const actions = state.catalog?.actions || [];
+  if (!actions.length) return;
+  closeActionMenus();
+  closeItemActionPopover();
+  itemActionTrigger = trigger;
+  trigger.setAttribute("aria-expanded", "true");
+  setPopoverTarget(trigger.closest(".card"));
+  itemActionPopover.innerHTML = `<header class="item-action-popover-head"><span>Move this item</span><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong></header><div class="item-action-popover-actions">${actions.map(action => actionButtonMarkup(action, "item-popover-action", true, `Move only ${item.name} to ${action.display_label}`)).join("")}</div>`;
+  itemActionPopover.querySelectorAll(".move-action").forEach(button => button.setAttribute("role", "menuitem"));
+  itemActionPopover.hidden = false;
+  positionItemActionPopover(trigger);
+  if (focusFirstAction) itemActionPopover.querySelector(".move-action")?.focus();
+}
+
+function toggleItemActionPopover(trigger, item, focusFirstAction = false) {
+  if (itemActionTrigger === trigger && !itemActionPopover.hidden) {
+    closeItemActionPopover({ restoreFocus: focusFirstAction });
+    return;
+  }
+  openItemActionPopover(trigger, item, focusFirstAction);
 }
 
 function toggleActionMenu(button) {
@@ -841,6 +1067,7 @@ function toggleActionMenu(button) {
   const opening = !wrapper.classList.contains("open");
   closeActionMenus(wrapper);
   wrapper.classList.toggle("open", opening);
+  wrapper.closest(".card")?.classList.toggle("action-menu-open", opening);
   wrapper.querySelector(".action-menu").hidden = !opening;
   button.setAttribute("aria-expanded", String(opening));
 }
@@ -853,6 +1080,13 @@ gallery.addEventListener("click", event => {
   if (!card || !state.catalog) return;
   const item = state.catalog.items.find(candidate => candidate.id === card.dataset.id);
   if (!item) return;
+  const trigger = event.target.closest(".tile-actions-trigger");
+  if (trigger) {
+    event.preventDefault();
+    event.stopPropagation();
+    toggleItemActionPopover(trigger, item, event.detail === 0);
+    return;
+  }
   if (event.target.closest(".card-select")) {
     if (!event.target.matches(".card-checkbox")) event.preventDefault();
     handleCardSelection(item, event, true);
@@ -860,14 +1094,6 @@ gallery.addEventListener("click", event => {
   }
   if (event.target.closest(".play-here")) { playHere(card, item); return; }
   if (event.target.closest(".reveal")) { jsonRequest("/api/reveal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }) }).catch(error => toast(error.message, { error: true })); return; }
-  const more = event.target.closest(".more-actions");
-  if (more) { toggleActionMenu(more); return; }
-  const move = event.target.closest(".move-action");
-  if (move) {
-    const action = configuredAction(move.dataset.actionId);
-    if (action) (selectedCount() ? performBulkMove(action) : performMove(action, item, move, card));
-    return;
-  }
   if (event.target.closest("a")) {
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       event.preventDefault();
@@ -878,12 +1104,62 @@ gallery.addEventListener("click", event => {
   handleCardSelection(item, event);
 });
 
+itemActionPopover.addEventListener("click", event => {
+  const move = event.target.closest(".move-action");
+  if (!move) return;
+  const action = configuredAction(move.dataset.actionId);
+  const item = state.catalog?.items?.find(candidate => candidate.id === state.popoverItemId);
+  if (!action || !item) return;
+  state.selectionAll = false;
+  state.allCriteria = null;
+  state.selectedIds.clear();
+  state.excludedIds.clear();
+  setItemSelected(item, true);
+  state.lastSelectedId = item.id;
+  closeItemActionPopover();
+  updateSelectionUI();
+  performBulkMove(action);
+});
+
+itemActionPopover.addEventListener("keydown", event => {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  const actions = [...itemActionPopover.querySelectorAll(".move-action:not(:disabled)")];
+  if (!actions.length) return;
+  event.preventDefault();
+  const current = Math.max(0, actions.indexOf(document.activeElement));
+  const next = event.key === "Home" ? 0
+    : event.key === "End" ? actions.length - 1
+      : event.key === "ArrowDown" ? (current + 1) % actions.length
+        : (current - 1 + actions.length) % actions.length;
+  actions[next].focus();
+});
+
+function updateActiveTileFromPointer(event) {
+  if (event.pointerType === "touch") return;
+  setActiveTile(event.target.closest?.(".card") || null);
+}
+
+// Active-tile tracking remains intentionally separate from rendering. It only
+// gives a destination shortcut an unambiguous current item; it never reveals
+// or positions controls.
+gallery.addEventListener("pointerover", updateActiveTileFromPointer, { passive: true });
+gallery.addEventListener("pointermove", updateActiveTileFromPointer, { passive: true });
+gallery.addEventListener("pointerout", event => {
+  if (event.relatedTarget?.closest?.("#gallery")) return;
+  setActiveTile(null);
+}, { passive: true });
+
 let searchTimer;
 search.addEventListener("input", () => {
   clearTimeout(searchTimer);
   searchTimer = setTimeout(() => { state.query = search.value; state.page = 1; state.lastSelectedId = null; loadCatalog(); }, 250);
 });
 sort.addEventListener("change", () => { state.sort = sort.value; state.page = 1; loadCatalog(); });
+thumbnailSize.addEventListener("input", event => {
+  closeItemActionPopover();
+  setActiveTile(null);
+  animateThumbnailSize(event.currentTarget.value);
+});
 document.querySelector("#kind-switch").addEventListener("click", event => {
   const button = event.target.closest("[data-kind]");
   if (!button) return;
@@ -924,6 +1200,32 @@ selectAll.addEventListener("click", () => {
   updateSelectionUI();
 });
 document.querySelector("#bulk-clear").addEventListener("click", clearSelection);
+window.addEventListener("wheel", event => {
+  if (event.deltaY < 0 && window.scrollY <= 1 && document.body.classList.contains("selection-active")) {
+    document.body.classList.add("selection-top-revealed");
+  }
+}, { passive: true });
+bulkBar.addEventListener("click", event => {
+  const more = event.target.closest(".more-actions");
+  if (more) { toggleActionMenu(more); return; }
+  const move = event.target.closest(".move-action");
+  if (!move) return;
+  const action = configuredAction(move.dataset.actionId);
+  if (action) performBulkMove(action);
+});
+window.addEventListener("resize", () => {
+  closeItemActionPopover();
+  setActiveTile(null);
+  if (!bulkBar.hidden && state.catalog) renderBulkActions(state.catalog.actions || []);
+});
+window.addEventListener("scroll", () => {
+  closeItemActionPopover();
+  setActiveTile(null);
+}, { passive: true });
+window.addEventListener("blur", () => {
+  closeItemActionPopover();
+  setActiveTile(null);
+});
 document.querySelector("#refresh").addEventListener("click", refreshCatalog);
 undoLast.addEventListener("click", () => undo());
 document.querySelector("#history-link").addEventListener("click", () => {
@@ -983,6 +1285,41 @@ document.querySelector("#appearance").addEventListener("change", async event => 
 document.querySelector("#settings-close").addEventListener("click", closeSettings);
 document.querySelector("#settings-cancel").addEventListener("click", closeSettings);
 scrim.addEventListener("click", closeSettings);
+document.querySelector("#update-check").addEventListener("click", async event => {
+  const button = event.currentTarget;
+  const status = document.querySelector("#update-status");
+  const copy = document.querySelector("#update-copy");
+  button.disabled = true;
+  button.textContent = "Checking GitHub…";
+  copy.hidden = true;
+  status.classList.remove("error", "available");
+  status.textContent = "Contacting GitHub’s public release service…";
+  try {
+    const update = await jsonRequest("/api/update-check", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: "{}",
+    });
+    if (update.update_available) {
+      status.classList.add("available");
+      status.textContent = `Version ${update.latest_version} is available. Open Release notes to review it, then update with Homebrew if that is how you installed SlideSorter.`;
+      copy.hidden = false;
+    } else {
+      status.textContent = `You’re up to date with SlideSorter ${update.current_version}. This manual check contacted GitHub only; no collection data was sent.`;
+    }
+  } catch (error) {
+    status.classList.add("error");
+    status.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "Check for updates";
+  }
+});
+document.querySelector("#update-copy").addEventListener("click", async event => {
+  try {
+    await copyText("brew update && brew upgrade slidesorter");
+    event.currentTarget.textContent = "Copied";
+    setTimeout(() => { event.currentTarget.textContent = "Copy Homebrew update"; }, 1800);
+  } catch (error) { toast(error.message, { error: true }); }
+});
 document.querySelector("#settings-form").addEventListener("click", event => {
   const choose = event.target.closest(".choose");
   if (choose) { chooseDirectory(choose); return; }
@@ -1010,13 +1347,18 @@ destinationList.addEventListener("input", event => {
     }
   }
   if (event.target.matches(".destination-root") && row) row.dataset.rootMode = "custom";
+  if (event.target.matches(".destination-shortcut")) {
+    event.target.value = [...event.target.value.trim()].slice(0, 1).join("");
+  }
 });
 document.querySelector("#destination-add").addEventListener("click", () => {
   const id = newActionId();
   const label = suggestedDestinationLabel();
+  const existing = collectDestinationActions();
+  const shortcut = suggestedShortcutForAction({ label }, existing);
   destinationList.insertAdjacentHTML("beforeend", destinationRowMarkup({
-    id, label, root: proposedDestinationPath(document.querySelector("#media-root").value, { id, label }), root_mode: "suggested",
-  }));
+    id, label, shortcut, root: proposedDestinationPath(document.querySelector("#media-root").value, { id, label }), root_mode: "suggested",
+  }, [...existing, { label, shortcut }]));
   refreshDestinationRows();
   destinationList.querySelector(".destination-row:last-child .destination-label").focus();
 });
@@ -1084,7 +1426,10 @@ document.querySelector("#settings-form").addEventListener("submit", async event 
 document.addEventListener("keydown", event => {
   if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target.matches("input,textarea,select")) { event.preventDefault(); search.focus(); }
   if (event.key === "Escape" && sheet.classList.contains("open")) closeSettings();
-  if (event.key === "Escape") closeActionMenus();
+  if (event.key === "Escape") {
+    closeActionMenus();
+    closeItemActionPopover({ restoreFocus: true });
+  }
   if (event.key === "Escape" && state.active) {
     event.preventDefault();
     stopActivePlayer();
@@ -1092,15 +1437,35 @@ document.addEventListener("keydown", event => {
     return;
   }
   if (event.code === "Space" && state.active && !event.target.matches("input,textarea,button,a,select")) { event.preventDefault(); state.active.video.paused ? state.active.video.play() : state.active.video.pause(); }
-  const selectionShortcutTarget = event.target.matches(".card-checkbox") || !event.target.matches("input,textarea,button,a,select,[contenteditable]");
+  const typingTarget = event.target.matches("input,textarea,select,[contenteditable]");
+  const selectionShortcutTarget = event.target.matches(".card-checkbox") || !typingTarget;
+  if (!event.metaKey && !event.ctrlKey && !event.altKey && !sheet.classList.contains("open") && !state.active && selectionShortcutTarget) {
+    if (!event.shiftKey && event.code === "KeyU") {
+      if (!undoLast.disabled) {
+        event.preventDefault();
+        undo();
+      }
+      return;
+    }
+    if (event.shiftKey && selectedCount() === 1) {
+      if (event.code === "KeyO") { event.preventDefault(); openSingleSelectedItem(); return; }
+      if (event.code === "KeyF") { event.preventDefault(); revealSingleSelectedItem(); return; }
+    }
+  }
   if (
-    event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey
-    && !sheet.classList.contains("open") && !state.active && selectionShortcutTarget
-    && selectedCount() > 0
+    event.key.length === 1 && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat
+    && !sheet.classList.contains("open") && !state.active && !typingTarget
   ) {
     const action = actionForShortcut(event.key);
     if (action) {
+      const targetedItem = targetedItemForShortcut();
+      if (selectedCount() === 0 && !targetedItem) return;
       event.preventDefault();
+      if (targetedItem) {
+        setItemSelected(targetedItem, true);
+        state.lastSelectedId = targetedItem.id;
+        updateSelectionUI();
+      }
       toast(`${action.display_label} (${shortcutForAction(action).toUpperCase()})`);
       performBulkMove(action);
     }
@@ -1109,6 +1474,25 @@ document.addEventListener("keydown", event => {
 
 document.addEventListener("click", event => {
   if (!event.target.closest(".action-menu-wrap")) closeActionMenus();
+  if (!event.target.closest(".tile-actions-trigger, .item-action-popover")) closeItemActionPopover();
+});
+
+document.addEventListener("pointerdown", event => {
+  if (!event.target.closest?.("#gallery, .item-action-popover")) setActiveTile(null);
+}, true);
+
+gallery.addEventListener("focusin", event => {
+  const card = event.target.closest(".card");
+  if (card) setActiveTile(card);
+});
+
+gallery.addEventListener("focusout", event => {
+  const card = event.target.closest(".card");
+  if (!card) return;
+  requestAnimationFrame(() => {
+    if (card.contains(document.activeElement)) return;
+    if (state.activeTileId === card.dataset.id) setActiveTile(null);
+  });
 });
 
 Promise.all([loadCatalog(), updateUndoState()]).then(() => {

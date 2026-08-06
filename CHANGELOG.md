@@ -2,6 +2,17 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.9.0] - 2026-08-06
+
+### Added
+
+- Hover now only highlights and identifies the active shortcut tile.
+ - A stable, faint … remains on every unselected tile.
+- Clicking it opens one shared fixed popover with all configured labels.
+- No per-tile action rows, synthetic hover reconciliation, or pointer-uncertain state remain.
+- Active-tile shortcuts are retained and were verified end to end using a temporary one-file collection.
+- Selection continues to use the global action bar.
+
 ## [3.8.0] - 2026-08-05
 
 ### Added

@@ -37,7 +37,7 @@ Range selection works across pagination because the server resolves the ordered 
 
 ## Route media
 
-The first run creates Stage and Remove destinations. Settings can rename, reorder, remove, or add destinations. The first two appear as direct card and bulk buttons. Additional destinations appear under More.
+The first run creates Stage and Remove destinations. Settings can rename, reorder, remove, or add destinations. Select one or more items to reveal the selection bar: all labels that fit are direct buttons there, and additional destinations appear under More. Each destination can have one unique letter-or-number shortcut; Settings proposes the first label character when it is unique. Destination shortcuts are page-level controls and remain active for the current selection whether or not a menu is visible. When nothing is selected, hovering or focusing a tile makes it the current shortcut target; clicking that tile's discreet `…` opens one shared action popover for the item. The popover is the only place individual destination labels appear, so it never changes grid layout or leaves controls attached to several tiles. `U` is permanently reserved for Undo. Each tile retains Open and Finder controls. With exactly one visible item selected, `⇧O` opens it in a new tab and `⇧F` reveals it in Finder; neither conflicts with the browser's ordinary Find shortcut.
 
 By default, SlideSorter preserves each relative path:
 
@@ -103,12 +103,18 @@ The adjacent retention setting controls how long Purged records remain. It defau
 
 Click Refresh after adding, renaming, moving, or deleting files outside SlideSorter. Refresh rescans the root and rebuilds metadata.
 
+## Tile actions and pointer diagnostics
+
+Hover only highlights a tile and identifies the current shortcut target; it does not create or reveal destination controls. The discreet `…` is a stable button on every unselected tile. Clicking it opens one shared popover in the browser's top UI layer. Clicking the title, resizing thumbnails, scrolling, or switching applications cannot strand action labels in the grid. If the browser stops reporting pointer movement, SlideSorter clears the shortcut target rather than risking an action on a stale tile; selecting an item or opening `…` remains deterministic.
+
+Settings → About & help → Pointer diagnostics remains available for browser event reports. The self-contained page records only browser event names, counts, positions, viewport information, and the browser user agent in memory. It does not read media, paths, settings, or collection state and makes no network requests.
+
 ## Change settings
 
 Settings can change:
 
 - media root;
-- ordered destination labels and folders;
+- ordered destination labels, folders, and shortcut keys;
 - Keep directory structure behavior;
 - picture/video inclusion;
 - collection title;

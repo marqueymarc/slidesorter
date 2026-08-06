@@ -73,6 +73,7 @@ class DestinationAction:
     id: str
     label: str
     root: Path
+    shortcut: str = ""
 
     @classmethod
     def from_raw(cls, media_root: Path, raw: object, index: int) -> "DestinationAction":
@@ -87,10 +88,15 @@ class DestinationAction:
         display, _, _ = action_presentation(label)
         if not display:
             raise ValueError(f"Destination {index + 1} needs a visible label")
-        return cls(action_id, label, resolve_root(media_root, raw.get("root"), display))
+        shortcut = str(raw.get("shortcut") or "").strip().casefold()
+        if shortcut and (len(shortcut) != 1 or not shortcut.isalnum()):
+            raise ValueError(f"Destination {index + 1} shortcut must be one letter or number")
+        if shortcut == "u":
+            raise ValueError("U is reserved for Undo")
+        return cls(action_id, label, resolve_root(media_root, raw.get("root"), display), shortcut)
 
     def config_dict(self) -> dict[str, str]:
-        return {"id": self.id, "label": self.label, "root": str(self.root)}
+        return {"id": self.id, "label": self.label, "root": str(self.root), "shortcut": self.shortcut}
 
     def public_dict(self) -> dict[str, str]:
         display, icon, tone = action_presentation(self.label)
@@ -112,6 +118,9 @@ def validate_actions(media_root: Path, actions: tuple[DestinationAction, ...]) -
     ids = [action.id for action in actions]
     if len(ids) != len(set(ids)):
         raise ValueError("Destination ids must be unique")
+    shortcuts = [action.shortcut for action in actions if action.shortcut]
+    if len(shortcuts) != len(set(shortcuts)):
+        raise ValueError("Destination shortcut keys must be unique")
     roots = [action.root for action in actions]
     if len(roots) != len(set(roots)):
         raise ValueError("Every destination must use a different folder")

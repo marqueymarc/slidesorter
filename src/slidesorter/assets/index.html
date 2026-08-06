@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>SlideSorter</title>
-  <link rel="stylesheet" href="/gallery/app.css?v=3.8.0">
-  <script src="/gallery/appearance.js?v=3.8.0"></script>
+  <link rel="icon" href="/gallery/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/gallery/app.css?v=3.9.0-ui13">
+  <script src="/gallery/appearance.js?v=3.9.0"></script>
 </head>
 <body>
   <div class="shell">
@@ -28,12 +29,13 @@
           <option value="name">Name</option>
           <option value="size">Largest first</option>
         </select>
+        <label class="thumbnail-size control" for="thumbnail-size"><span>Size</span><input id="thumbnail-size" type="range" min="160" max="440" step="10" value="280" aria-label="Thumbnail size"></label>
         <button class="control utility" id="refresh" type="button">Refresh</button>
-        <button class="control utility undo-last" id="undo-last" type="button" disabled>↶ Undo</button>
+        <button class="control utility undo-last" id="undo-last" type="button" title="Undo the latest available move · U" disabled>↶ Undo <kbd class="item-shortcut">U</kbd></button>
         <a class="control utility utility-link" id="history-link" href="/gallery/history.html">History</a>
         <button class="control utility" id="settings-open" type="button">Settings</button>
       </div>
-      <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div><strong id="bulk-count">0 selected</strong><span class="bulk-guidance">Choose a label on any selected card</span><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></div></aside>
+      <aside class="bulk-bar" id="bulk-bar" aria-live="polite" hidden><div class="bulk-summary"><strong id="bulk-count">0 selected</strong><span class="bulk-guidance">Choose a destination for the selection</span></div><div class="bulk-actions" id="bulk-actions"></div><button class="bulk-clear" id="bulk-clear" type="button">Clear</button></aside>
     </header>
     <main class="gallery" id="gallery" aria-live="polite"></main>
     <nav class="pagination" id="pagination" aria-label="Gallery pages">
@@ -42,7 +44,7 @@
     </nav>
   </div>
 
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.8.0</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.0</footer>
 
   <div class="sheet-scrim" id="settings-scrim" hidden></div>
   <aside class="settings-sheet" id="settings-sheet" aria-labelledby="settings-title" aria-hidden="true">
@@ -55,7 +57,7 @@
         <div class="recent-collections" id="recent-collections" hidden><span>Recent collections — choose one to switch</span><div id="recent-collection-list"></div></div>
       </section>
       <section class="destination-settings" aria-labelledby="destination-title">
-        <div class="destination-heading"><div><h3 id="destination-title">Destinations</h3><p>The first two become card buttons. Additional destinations appear under More.</p></div><button class="button destination-add" id="destination-add" type="button">＋ Add</button></div>
+        <div class="destination-heading"><div><h3 id="destination-title">Destinations</h3><p>Configure each destination’s label, shortcut, and folder. The gallery keeps the available actions close to your selection.</p></div><button class="button destination-add" id="destination-add" type="button">＋ Add</button></div>
         <div class="destination-list" id="destination-list"></div>
         <p class="destination-hint">Optional presentation hints can follow a label: <code>Remove (use a red trash can glyph)</code>. SlideSorter recognizes a small built-in vocabulary; it does not send labels to an AI service.</p>
         <p class="destination-root-note" id="destination-root-note" hidden>Proposed destination folders are under the selected new root. They are not created until you confirm the new collection.</p>
@@ -70,12 +72,25 @@
         <label class="compact-field history-retention"><span>Keep Purged records for</span><span class="retention-control"><input id="history-retention-days" name="history_retention_days" type="number" min="0" max="3650" step="1" value="90" required><span>days</span></span></label>
         <p class="history-maintenance-note">Missing moved files become Purged and lose Undo. Purged records older than this limit are removed. Available, undoable moves are never pruned.</p>
       </section>
+      <section class="about-help" aria-labelledby="about-help-title">
+        <div class="about-help-heading"><div><h3 id="about-help-title">About &amp; help</h3><p>Support and update checks are always your choice.</p></div><span class="about-version">v3.9.0</span></div>
+        <div class="update-check-row"><button class="button quiet" id="update-check" type="button">Check for updates</button><button class="button quiet" id="update-copy" type="button" hidden>Copy Homebrew update</button></div>
+        <p class="update-status" id="update-status" role="status">Manual only. Checking contacts GitHub’s release service; no media, paths, thumbnails, or SlideSorter state are sent.</p>
+        <nav class="about-links" aria-label="SlideSorter help and project links">
+          <a href="https://github.com/marqueymarc/slidesorter/releases/latest" target="_blank" rel="noreferrer">Release notes <span>↗</span></a>
+          <a href="https://github.com/marqueymarc/slidesorter/issues/new/choose" target="_blank" rel="noreferrer">Report an issue <span>↗</span></a>
+          <a href="https://github.com/marqueymarc/slidesorter" target="_blank" rel="noreferrer">Contribute on GitHub <span>↗</span></a>
+          <a href="/gallery/pointer-probe.html" target="_blank" rel="noopener">Pointer diagnostics <span>↗</span></a>
+          <a href="mailto:marc@marcmeyer.com?subject=SlideSorter%20feedback">Email Marc <span>↗</span></a>
+        </nav>
+      </section>
       <p class="settings-note">Destinations may be on other disks. Cross-disk moves can take longer, but remain undoable while the destination file is present. Nothing is overwritten.</p>
       <div class="sheet-actions"><button class="button quiet" id="settings-cancel" type="button">Cancel</button><button class="button primary" id="settings-save" type="submit">Save & rebuild</button></div>
     </form>
   </aside>
 
+  <aside class="item-action-popover" id="item-action-popover" role="menu" aria-label="Actions for this item" hidden></aside>
   <div class="toast-region" id="toasts" aria-live="polite"></div>
-  <script src="/gallery/app.js?v=3.8.0" defer></script>
+  <script src="/gallery/app.js?v=3.9.0-ui13" defer></script>
 </body>
 </html>

@@ -51,6 +51,37 @@ class DestinationValidationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 validate_actions(media, actions)
 
+    def test_shortcuts_are_preserved_and_must_be_unique(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            media = Path(temporary) / "media"
+            media.mkdir()
+            actions = actions_from_raw(
+                media,
+                [
+                    {"id": "stage", "label": "Stage", "root": "Staged", "shortcut": "S"},
+                    {"id": "review", "label": "Review", "root": "Review", "shortcut": "r"},
+                ],
+            )
+            self.assertEqual(actions[0].public_dict()["shortcut"], "s")
+            with self.assertRaisesRegex(ValueError, "shortcut keys must be unique"):
+                actions_from_raw(
+                    media,
+                    [
+                        {"id": "stage", "label": "Stage", "root": "Staged", "shortcut": "s"},
+                        {"id": "save", "label": "Save", "root": "Save", "shortcut": "S"},
+                    ],
+                )
+
+    def test_undo_shortcut_is_reserved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            media = Path(temporary) / "media"
+            media.mkdir()
+            with self.assertRaisesRegex(ValueError, "U is reserved for Undo"):
+                actions_from_raw(
+                    media,
+                    [{"id": "undoable", "label": "Undoable", "root": "Undoable", "shortcut": "U"}],
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

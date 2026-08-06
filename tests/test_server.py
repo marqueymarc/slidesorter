@@ -5,10 +5,12 @@ from types import SimpleNamespace
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from slidesorter.actions import DestinationAction
 from slidesorter.server import (
     DIRECTORY_PROMPTS,
+    PUBLIC_GALLERY_FILES,
     GalleryConfig,
     GalleryHandler,
     collection_state_dir,
@@ -16,10 +18,46 @@ from slidesorter.server import (
     provision_destination_roots,
     history_entry_undo_available,
     inside,
+    latest_release_payload,
+    release_version_parts,
     reconcile_history,
     safe_relative,
     validate_roots,
 )
+
+
+class PublicAssetTests(unittest.TestCase):
+    def test_pointer_probe_is_an_explicit_public_gallery_asset(self):
+        self.assertIn("pointer-probe.html", PUBLIC_GALLERY_FILES)
+
+
+class UpdateCheckTests(unittest.TestCase):
+    def test_release_version_parts_accepts_tags_and_rejects_other_values(self):
+        self.assertEqual(release_version_parts("v3.8.0"), (3, 8, 0))
+        self.assertEqual(release_version_parts("3.8.0-rc1"), (3, 8, 0))
+        with self.assertRaises(ValueError):
+            release_version_parts("latest")
+
+    @patch("slidesorter.server.urlopen")
+    def test_latest_release_payload_compares_public_release_without_collection_data(self, mocked_open):
+        class Response:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            @staticmethod
+            def read():
+                return b'{"tag_name":"v3.10.0","html_url":"https://github.com/marqueymarc/slidesorter/releases/tag/v3.10.0"}'
+
+        mocked_open.return_value = Response()
+        payload = latest_release_payload()
+        self.assertEqual(payload["current_version"], "3.9.0")
+        self.assertEqual(payload["latest_version"], "3.10.0")
+        self.assertTrue(payload["update_available"])
+        self.assertEqual(payload["release_url"], "https://github.com/marqueymarc/slidesorter/releases/tag/v3.10.0")
+        self.assertNotIn("media_root", payload)
 
 
 class DirectoryPickerCompatibilityTests(unittest.TestCase):

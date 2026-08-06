@@ -59,7 +59,7 @@ slidesorter serve --config PATH [--host HOST] [--port PORT]
 
 ## Destination settings
 
-The browser Settings panel stores an ordered `actions` list in `gallery-config.json`. Each entry has a stable id, a raw label, and an absolute destination root. The first two actions are direct buttons; later actions appear under More.
+The browser Settings panel stores an ordered `actions` list in `gallery-config.json`. Each entry has a stable id, a raw label, an absolute destination root, and an optional unique one-character letter-or-number shortcut. When items are selected, all destination labels that fit are direct selection-bar buttons; the remainder appear under More. Settings suggests the first label character when it is unique, while preserving an explicit shortcut or a deliberately blank field.
 
 The builder preserves actions and the directory-structure setting when the same state profile is rebuilt or started again. Existing Stage and Remove configuration migrates automatically.
 

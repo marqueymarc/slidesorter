@@ -24,7 +24,7 @@ information only; GitHub Pages never receives your media or SlideSorter state.
 - Expand pictures without leaving the gallery.
 - Select one item, a page, a Shift range, or all filtered results.
 - Route individual items and batches to configurable destination folders.
-- Keep the first two destinations as direct buttons and place additional labels under More.
+- Select media, then use every destination label that fits in the global selection bar; overflow labels are under More.
 - Use lightweight label hints for built-in glyphs and tones without an AI service.
 - Preserve relative directory paths during every move.
 - Undo one History item or all remaining items in its batch.
@@ -85,7 +85,7 @@ Upgrade later with `brew update && brew upgrade slidesorter`.
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.8.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.9.0-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -149,7 +149,7 @@ slidesorter run "/Volumes/Archive/Media" \
   --removed-root "/Volumes/Review Holding"
 ```
 
-After startup, use Settings to rename, reorder, remove, or add up to 16 destinations. The first two stay visible as buttons; the rest appear under More. Destination settings survive rebuilds and later invocations that use the same state profile. To review another root, start a separate SlideSorter instance rather than changing the root in Settings.
+After startup, use Settings to rename, reorder, remove, or add up to 16 destinations. Select one or more items to reveal the selection bar: all labels that fit stay visible, while the remainder appear under More. Each destination can have one unique letter-or-number shortcut; Settings suggests the first label character when it is unambiguous. Destination settings survive rebuilds and later invocations that use the same state profile. To review another root, start a separate SlideSorter instance rather than changing the root in Settings.
 
 Keep directory structure is enabled by default. Disable it to move files directly into each destination root. Flat moves refuse duplicate filenames and existing destinations.
 
@@ -197,6 +197,12 @@ Appearance is saved with each state profile. In Settings, choose **System defaul
 to follow the Mac or browser, or lock that gallery profile to **Light** or **Dark**.
 Changing appearance does not rebuild or rescan the collection.
 
+Settings → **About & help** includes optional links for release notes, issues,
+contributions, and email feedback. Its manual **Check for updates** button contacts
+GitHub only when you press it; it sends no collection data and never installs an
+update. Homebrew users can copy `brew update && brew upgrade slidesorter` when a
+new release is available.
+
 Read [State and privacy](docs/STATE_AND_PRIVACY.md) before automating cleanup.
 
 ## Stateless distribution and hosting
@@ -220,7 +226,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.8.0
+  ghcr.io/marqueymarc/slidesorter:3.9.0
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.
@@ -252,9 +258,12 @@ See [Remote access](docs/REMOTE_ACCESS.md) for threat-model details.
 | Shift-click | Toggle the ordered range from the anchor |
 | Select all on page | Select or clear the visible page |
 | Select all results | Select the current filter without downloading every ID |
-| First two destination buttons | Move into those configured roots |
-| More | Show any additional destination labels |
-| Undo | Restore the original path |
+| Selection-bar destination buttons | Move the selected items into those configured roots |
+| More | Show additional destination labels for the selected items |
+| Open / Finder on a card | Open that item separately or reveal its original in Finder |
+| ⇧O / ⇧F | With one selected item, open it or reveal it in Finder (does not use browser Find) |
+| Single selected card | Also shows its first two destination labels and More for direct one-item routing |
+| U / Undo | Restore the latest available move |
 | History thumbnail | Expand a picture or play a video in place |
 | Space | Play or pause the active inline video |
 | `/` | Focus search |

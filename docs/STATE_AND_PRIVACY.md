@@ -4,7 +4,9 @@
 
 SlideSorter reads only the configured media root and its generated state profile. It does not upload media, analytics, filenames, thumbnails, or history.
 
-The application contains no telemetry SDK and makes no application-level outbound requests.
+The application contains no telemetry SDK and makes no background application-level outbound requests. Settings → **About & help** has an optional, manual **Check for updates** button. Only when pressed, SlideSorter requests public release metadata from GitHub. GitHub receives the normal request metadata such as your IP address and request time; SlideSorter sends no media, catalog, filesystem paths, thumbnails, history, settings, or collection identifiers. It never downloads or installs an update automatically.
+
+The Pointer diagnostics page is a static local asset. It keeps a bounded in-memory log of browser pointer and focus events and can copy that report to the clipboard only when requested. It does not call SlideSorter APIs, inspect collection data, persist its log, or make network requests.
 
 Package installation and container pulls may contact their normal registries.
 

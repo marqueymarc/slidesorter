@@ -45,7 +45,7 @@ PICTURE_EXTENSIONS = {
     ".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".tif", ".tiff", ".bmp"
 }
 ASSET_FILES = (
-    "index.html", "app.css", "appearance.js", "app.js", "viewer.html", "history.html", "history.js",
+    "index.html", "app.css", "appearance.js", "app.js", "viewer.html", "history.html", "history.js", "pointer-probe.html", "favicon.svg",
 )
 DEFAULT_HISTORY_RETENTION_DAYS = 90
 

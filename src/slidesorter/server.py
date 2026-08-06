@@ -16,9 +16,12 @@ import shutil
 import subprocess
 import sys
 import threading
+from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.request import Request, urlopen
 from uuid import uuid4
 
+from . import __version__
 from .actions import (
     DestinationAction,
     action_presentation,
@@ -46,8 +49,10 @@ PICTURE_EXTENSIONS = {
 }
 MEDIA_EXTENSIONS = VIDEO_EXTENSIONS | PICTURE_EXTENSIONS
 MEDIA_MODES = {"videos", "pictures", "both"}
+PROJECT_URL = "https://github.com/marqueymarc/slidesorter"
+LATEST_RELEASE_API_URL = "https://api.github.com/repos/marqueymarc/slidesorter/releases/latest"
 PUBLIC_GALLERY_FILES = {
-    "index.html", "app.css", "appearance.js", "app.js", "viewer.html", "history.html", "history.js",
+    "index.html", "app.css", "appearance.js", "app.js", "viewer.html", "history.html", "history.js", "pointer-probe.html", "favicon.svg",
     "catalog.json", "manifest.json",
 }
 DIRECTORY_PROMPTS = {
@@ -56,6 +61,53 @@ DIRECTORY_PROMPTS = {
     "staged_root": "Choose the Stage directory",
     "removed_root": "Choose the Remove directory",
 }
+
+
+def release_version_parts(value: object) -> tuple[int, ...]:
+    """Normalize a stable GitHub tag or package version for comparison."""
+
+    if not isinstance(value, str):
+        raise ValueError("Release version is missing")
+    text = value.strip().removeprefix("v").split("-", 1)[0]
+    parts = text.split(".")
+    if len(parts) < 2 or any(not part.isdecimal() for part in parts):
+        raise ValueError("Release version is invalid")
+    return tuple(int(part) for part in parts)
+
+
+def latest_release_payload() -> dict[str, object]:
+    """Fetch public release metadata only after an explicit user request."""
+
+    request = Request(
+        LATEST_RELEASE_API_URL,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": f"SlideSorter/{__version__} manual-update-check",
+        },
+    )
+    try:
+        with urlopen(request, timeout=5) as response:  # nosec B310 - fixed project endpoint
+            raw = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, OSError, json.JSONDecodeError) as error:
+        raise RuntimeError("Could not reach GitHub to check for updates. Try again later.") from error
+    if not isinstance(raw, dict):
+        raise RuntimeError("GitHub returned an unexpected release response")
+    latest_version = raw.get("tag_name")
+    release_url = raw.get("html_url")
+    try:
+        available = release_version_parts(latest_version)
+        current = release_version_parts(__version__)
+    except ValueError as error:
+        raise RuntimeError("GitHub returned an invalid release version") from error
+    if not isinstance(release_url, str) or not release_url.startswith("https://github.com/"):
+        release_url = f"{PROJECT_URL}/releases/latest"
+    return {
+        "current_version": __version__,
+        "latest_version": str(latest_version).removeprefix("v"),
+        "update_available": available > current,
+        "release_url": release_url,
+        "project_url": PROJECT_URL,
+    }
 
 
 def collection_state_dir(media_root: Path, profile: str = DEFAULT_PROFILE) -> Path:
@@ -90,7 +142,7 @@ def copied_actions(media_root: Path, actions: tuple[DestinationAction, ...]) -> 
     """Copy label semantics but deliberately create fresh destination paths."""
 
     return tuple(
-        DestinationAction(action.id, action.label, (media_root / copied_destination_name(action)).resolve())
+        DestinationAction(action.id, action.label, (media_root / copied_destination_name(action)).resolve(), action.shortcut)
         for action in actions
     )
 
@@ -1045,12 +1097,16 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "/api/reveal", "/api/move", "/api/bulk-move", "/api/refresh",
             "/api/remove", "/api/stage", "/api/bulk-stage", "/api/bulk-remove",
             "/api/settings", "/api/appearance", "/api/undo", "/api/choose-directory", "/api/rebuild-history",
-            "/api/catalog-range", "/api/collection-status", "/api/switch-collection",
+            "/api/catalog-range", "/api/collection-status", "/api/switch-collection", "/api/update-check",
         }
         if action not in allowed:
             self.respond_json(HTTPStatus.NOT_FOUND, {"error": "Unknown action"})
             return
         try:
+            if action == "/api/update-check":
+                self.read_json_body(allow_empty=True)
+                self.respond_json(HTTPStatus.OK, latest_release_payload())
+                return
             if action == "/api/choose-directory":
                 self.choose_directory(self.read_json_body())
                 return

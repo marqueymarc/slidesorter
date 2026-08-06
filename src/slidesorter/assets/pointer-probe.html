@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Pointer diagnostics · SlideSorter</title>
+  <link rel="icon" href="/gallery/favicon.svg" type="image/svg+xml">
+  <style>
+    :root{--bg:#0c1215;--surface:#121b1f;--surface-2:#18251f;--line:#34483e;--text:#edf4f0;--muted:#a8b8af;--faint:#74877d;--mint:#7fd49f;--mint-strong:#42a76c;--warn:#efc772;color-scheme:dark;font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    *{box-sizing:border-box}body{min-height:100vh;margin:0;color:var(--text);background:radial-gradient(circle at 12% -10%,rgb(66 167 108/.16),transparent 33%),var(--bg)}button{font:inherit}
+    .shell{width:min(1120px,calc(100% - 36px));margin:0 auto;padding:28px 0 50px}.top{display:flex;align-items:start;justify-content:space-between;gap:24px;margin-bottom:24px}.brand{color:var(--mint);font-size:.74rem;font-weight:800;letter-spacing:.08em;text-decoration:none;text-transform:uppercase}.brand:hover{text-decoration:underline}h1{margin:8px 0 6px;font-size:clamp(1.7rem,4vw,2.7rem);letter-spacing:-.045em}.lede{max-width:700px;margin:0;color:var(--muted);line-height:1.55}.privacy{max-width:310px;padding:11px 13px;border:1px solid var(--line);border-radius:10px;color:var(--muted);background:rgb(18 27 31/.82);font-size:.72rem;line-height:1.45}
+    .instructions{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin:0 0 18px;padding:0;list-style:none;counter-reset:step}.instructions li{min-height:82px;padding:12px;border:1px solid var(--line);border-radius:12px;color:var(--muted);background:var(--surface);font-size:.75rem;line-height:1.4}.instructions li::before{display:grid;width:22px;height:22px;margin-bottom:7px;place-items:center;border-radius:50%;color:#092115;background:var(--mint);font-weight:850;counter-increment:step;content:counter(step)}
+    .pads{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.pad{position:relative;min-height:190px;padding:16px;border:1px solid var(--line);border-radius:18px;color:var(--muted);background:linear-gradient(145deg,var(--surface-2),var(--surface));transition:border-color 120ms ease,box-shadow 120ms ease,transform 120ms ease}.pad::after{position:absolute;inset:9px;border:2px solid transparent;border-radius:12px;content:"";pointer-events:none}.pad:hover{border-color:var(--mint-strong);box-shadow:0 16px 38px rgb(0 0 0/.22);transform:translateY(-2px)}.pad:hover::after{border-color:rgb(127 212 159/.44)}.pad.js-active{box-shadow:inset 0 0 0 3px var(--warn),0 16px 38px rgb(0 0 0/.22)}.pad strong{display:block;color:var(--text);font-size:1.05rem}.pad span{position:absolute;bottom:15px;left:16px;color:var(--faint);font-size:.7rem}.pad:hover span::before{content:"CSS hover · "}.pad.js-active span::after{content:" · JS pointer"}
+    .dashboard{display:grid;grid-template-columns:1.05fr 1.95fr;gap:14px;margin-top:18px}.panel{padding:17px;border:1px solid var(--line);border-radius:15px;background:rgb(18 27 31/.9)}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:13px}.panel h2{margin:0;font-size:.9rem}.buttons{display:flex;gap:7px}.button{min-height:31px;padding:0 10px;border:1px solid var(--line);border-radius:7px;color:var(--text);background:var(--surface-2);cursor:pointer;font-size:.7rem;font-weight:700}.button:hover{border-color:var(--mint-strong);color:var(--mint)}.status-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.status{padding:10px;border:1px solid var(--line);border-radius:9px}.status span{display:block;color:var(--faint);font-size:.63rem;letter-spacing:.05em;text-transform:uppercase}.status strong{display:block;margin-top:4px;font-size:.78rem}.status strong.good{color:var(--mint)}.status strong.warn{color:var(--warn)}.counters{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.counter{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 9px;border-radius:7px;background:rgb(255 255 255/.035);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.68rem}.counter output{color:var(--mint);font-weight:800}.log{height:168px;margin-top:12px;padding:10px;overflow:auto;border:1px solid var(--line);border-radius:9px;color:var(--muted);background:#091013;font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}.log div+div{margin-top:2px}.empty{color:var(--faint)}
+    @media(prefers-color-scheme:light){:root{--bg:#f4f8f5;--surface:#fff;--surface-2:#eaf4ed;--line:#b9cbbf;--text:#17251c;--muted:#52645a;--faint:#738278;--mint:#28794d;--mint-strong:#4b9d69;--warn:#956311;color-scheme:light}.privacy,.panel{background:rgb(255 255 255/.9)}.log{background:#f1f6f2}.pad{background:linear-gradient(145deg,#fff,#eaf4ed)}}
+    @media(max-width:760px){.top{display:grid}.privacy{max-width:none}.instructions{grid-template-columns:1fr}.instructions li{min-height:0}.pads{grid-template-columns:repeat(2,1fr)}.dashboard{grid-template-columns:1fr}.counters{grid-template-columns:repeat(2,1fr)}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top"><div><a class="brand" href="/gallery/">← SlideSorter</a><h1>Pointer diagnostics</h1><p class="lede">A deliberately small test surface for the Chrome/macOS case where hover stops updating after another window receives focus.</p></div><p class="privacy">Local and temporary. This page reads browser pointer and focus events only. It does not inspect media, paths, settings, or collection state, and makes no network requests.</p></header>
+    <ol class="instructions"><li>Move among the pads. The CSS and JavaScript indicators should follow.</li><li>Click another application window, such as Mail.</li><li>Return by clicking this page’s heading—not by leaving and re-entering Chrome.</li><li>Move directly across the pads while the pointer stays inside Chrome.</li><li>If counters freeze and neither indicator follows, the browser failure is captured.</li></ol>
+    <section class="pads" aria-label="Pointer test pads"><div class="pad" tabindex="0" data-pad="A"><strong>North</strong><span>Pad A</span></div><div class="pad" tabindex="0" data-pad="B"><strong>East</strong><span>Pad B</span></div><div class="pad" tabindex="0" data-pad="C"><strong>South</strong><span>Pad C</span></div><div class="pad" tabindex="0" data-pad="D"><strong>West</strong><span>Pad D</span></div></section>
+    <section class="dashboard">
+      <article class="panel"><div class="panel-head"><h2>Live state</h2><div class="buttons"><button class="button" id="clear" type="button">Clear</button><button class="button" id="copy" type="button">Copy report</button></div></div><div class="status-grid"><div class="status"><span>Window</span><strong id="focus-state">Focused</strong></div><div class="status"><span>CSS hover</span><strong id="css-state">None</strong></div><div class="status"><span>JS pointer</span><strong id="js-state">None</strong></div><div class="status"><span>Last event</span><strong id="last-state">Waiting</strong></div></div></article>
+      <article class="panel"><div class="panel-head"><h2>Event evidence</h2><span id="copy-status" aria-live="polite"></span></div><div class="counters" id="counters"></div><div class="log" id="log"><div class="empty">Move the pointer to begin.</div></div></article>
+    </section>
+  </main>
+  <script>
+    (() => {
+      const eventNames = ["focus", "blur", "pointermove", "mousemove", "pointerover", "mouseover", "pointerenter", "mouseenter", "pointerdown", "click"];
+      const counts = Object.fromEntries(eventNames.map(name => [name, 0]));
+      const events = [];
+      const pads = [...document.querySelectorAll(".pad")];
+      const counters = document.querySelector("#counters");
+      const log = document.querySelector("#log");
+      const focusState = document.querySelector("#focus-state");
+      const cssState = document.querySelector("#css-state");
+      const jsState = document.querySelector("#js-state");
+      const lastState = document.querySelector("#last-state");
+      const copyStatus = document.querySelector("#copy-status");
+      let jsPad = null;
+
+      function renderCounters() {
+        counters.innerHTML = eventNames.map(name => `<div class="counter"><span>${name}</span><output>${counts[name]}</output></div>`).join("");
+      }
+
+      function renderLog() {
+        log.innerHTML = events.length ? events.map(entry => `<div>${entry}</div>`).join("") : '<div class="empty">Move the pointer to begin.</div>';
+        log.scrollTop = log.scrollHeight;
+      }
+
+      function record(name, event) {
+        counts[name] += 1;
+        const target = event?.target?.closest?.(".pad")?.dataset.pad || event?.target?.tagName?.toLowerCase() || "window";
+        const position = typeof event?.clientX === "number" ? ` @ ${Math.round(event.clientX)},${Math.round(event.clientY)}` : "";
+        const stamp = new Date().toLocaleTimeString([], { hour12: false, fractionalSecondDigits: 3 });
+        events.push(`${stamp}  ${name.padEnd(12)} ${target}${position}`);
+        if (events.length > 40) events.shift();
+        lastState.textContent = `${name} · ${target}`;
+        renderCounters();
+        renderLog();
+      }
+
+      function updateFocus(focused) {
+        focusState.textContent = focused ? "Focused" : "Blurred";
+        focusState.className = focused ? "good" : "warn";
+      }
+
+      function updateCssHover() {
+        const hovered = document.querySelector(".pad:hover");
+        cssState.textContent = hovered ? `Pad ${hovered.dataset.pad}` : "None";
+        cssState.className = hovered ? "good" : "";
+      }
+
+      function updateJsPointer(event) {
+        const pad = document.elementFromPoint(event.clientX, event.clientY)?.closest(".pad") || null;
+        if (pad === jsPad) return;
+        jsPad?.classList.remove("js-active");
+        jsPad = pad;
+        jsPad?.classList.add("js-active");
+        jsState.textContent = jsPad ? `Pad ${jsPad.dataset.pad}` : "None";
+        jsState.className = jsPad ? "good" : "";
+      }
+
+      window.addEventListener("focus", event => { updateFocus(true); record("focus", event); });
+      window.addEventListener("blur", event => { updateFocus(false); record("blur", event); });
+      eventNames.filter(name => !["focus", "blur"].includes(name)).forEach(name => {
+        document.addEventListener(name, event => {
+          if (name === "pointermove") updateJsPointer(event);
+          record(name, event);
+          updateCssHover();
+        }, { capture: true, passive: true });
+      });
+      setInterval(updateCssHover, 200);
+
+      document.querySelector("#clear").addEventListener("click", () => {
+        eventNames.forEach(name => { counts[name] = 0; });
+        events.length = 0;
+        lastState.textContent = "Cleared";
+        copyStatus.textContent = "";
+        renderCounters();
+        renderLog();
+      });
+
+      document.querySelector("#copy").addEventListener("click", async () => {
+        const report = [
+          "SlideSorter pointer diagnostics",
+          `Time: ${new Date().toISOString()}`,
+          `User agent: ${navigator.userAgent}`,
+          `Platform: ${navigator.platform}`,
+          `Viewport: ${innerWidth}x${innerHeight} @ ${devicePixelRatio}x`,
+          `Window: ${document.hasFocus() ? "focused" : "blurred"}`,
+          `CSS hover: ${cssState.textContent}`,
+          `JS pointer: ${jsState.textContent}`,
+          `Counters: ${JSON.stringify(counts)}`,
+          "Recent events:",
+          ...events,
+        ].join("\n");
+        try { await navigator.clipboard.writeText(report); copyStatus.textContent = "Report copied"; }
+        catch { copyStatus.textContent = "Clipboard unavailable"; }
+      });
+
+      updateFocus(document.hasFocus());
+      renderCounters();
+      updateCssHover();
+    })();
+  </script>
+</body>
+</html>

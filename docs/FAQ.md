@@ -6,7 +6,7 @@ No. Remove moves files to a configured holding directory. Deleting that director
 
 ## Can I add destinations besides Stage and Remove?
 
-Yes. Settings supports up to 16 ordered labels and folders. The first two are direct buttons and the rest appear under More.
+Yes. Settings supports up to 16 ordered labels, shortcut keys, and folders. Select media to reveal every destination label that fits; any overflow is available under More.
 
 ## Do parenthetical icon instructions use AI?
 
@@ -39,6 +39,10 @@ The browser may not support that file’s codec or container. SlideSorter does n
 ## Why is seeking unavailable?
 
 Seeking requires a browser-supported format and HTTP byte ranges. SlideSorter supplies byte ranges, but the browser controls codec support.
+
+## Why did the tile actions stop appearing when I move the pointer?
+
+Tile actions no longer depend on hover. Hover only highlights the current tile and targets its configured shortcut. Use the stable `…` on any unselected tile to open the one shared destination popover, or select items to use the global action bar. SlideSorter clears the shortcut target after focus, resize, or scrolling if pointer delivery is uncertain, so it cannot act on a stale tile. Settings → About & help → Pointer diagnostics provides a local, media-free event report if the browser itself still behaves unexpectedly.
 
 ## Can a destination live on another disk?
 

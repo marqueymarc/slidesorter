@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>Viewer · SlideSorter</title>
-  <link rel="stylesheet" href="/gallery/app.css?v=3.8.0">
-  <script src="/gallery/appearance.js?v=3.8.0"></script>
+  <link rel="icon" href="/gallery/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/gallery/app.css?v=3.9.0-ui6">
+  <script src="/gallery/appearance.js?v=3.9.0"></script>
 </head>
 <body>
   <main class="viewer-shell">
@@ -16,7 +17,7 @@
     <div id="media"></div>
     <p class="viewer-error" id="error"></p>
   </main>
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.8.0</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.0</footer>
   <script>
     const parameters = new URLSearchParams(location.search);
     const id = parameters.get("id");
@@ -41,8 +42,10 @@
         host.append(image);
       } else {
         const video = document.createElement("video");
+        video.className = "viewer-media";
         video.controls = true;
         video.autoplay = true;
+        video.playsInline = true;
         video.preload = "metadata";
         video.src = source;
         host.append(video);
