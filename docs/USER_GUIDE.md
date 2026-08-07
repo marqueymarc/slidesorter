@@ -20,7 +20,7 @@ Change page capacity between 25 and 500. Start with 100 on most machines. Type a
 
 Click a card’s central play control to play a video in place. Use native controls to seek. Press Space to play or pause the active video.
 
-Open a media item in a new tab for a larger viewer. The full-screen tab intentionally has no back control because the gallery remains open in its original tab. Click the SlideSorter wordmark to open a fresh gallery tab.
+Open a media item in a new tab for a larger viewer. The viewer includes Previous/Next controls, arrow-key navigation, and the configured destination buttons with their shortcuts. Applying a destination moves the item recoverably and advances to the adjacent item. The full-screen tab intentionally has no back control because the gallery remains open in its original tab. Press Escape to return when using the viewer in place, or click the SlideSorter wordmark to open a fresh gallery tab.
 
 When inline playback ends, SlideSorter restores the card poster and selector.
 

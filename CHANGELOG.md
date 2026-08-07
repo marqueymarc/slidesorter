@@ -2,6 +2,17 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.9.2] - 2026-08-07
+
+### Added
+
+- Added arrow-key navigation between gallery tiles and adjacent media in the standalone viewer.
+- Added viewer-level destination buttons and case-insensitive destination shortcuts, with automatic advance after a move.
+
+### Fixed
+
+- Destination shortcuts now work when focus remains on a selected tile’s checkbox, while continuing to stay inactive in text fields.
+
 ## [3.9.1] - 2026-08-07
 
 ### Fixed

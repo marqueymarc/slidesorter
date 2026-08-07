@@ -53,7 +53,7 @@ class UpdateCheckTests(unittest.TestCase):
 
         mocked_open.return_value = Response()
         payload = latest_release_payload()
-        self.assertEqual(payload["current_version"], "3.9.1")
+        self.assertEqual(payload["current_version"], "3.9.2")
         self.assertEqual(payload["latest_version"], "3.10.0")
         self.assertTrue(payload["update_available"])
         self.assertEqual(payload["release_url"], "https://github.com/marqueymarc/slidesorter/releases/tag/v3.10.0")
@@ -389,6 +389,39 @@ class HistoryMediaTests(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 handler.history_media_path("missing")
+
+
+class CatalogNavigationTests(unittest.TestCase):
+    def test_catalog_neighbors_returns_adjacent_items_in_requested_order(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            media = (root / "media").resolve()
+            state = (root / "state").resolve()
+            media.mkdir()
+            state.mkdir()
+            config = GalleryConfig(
+                media_root=media, gallery_root=state, title="Fixture", source_label="Fixture",
+                actions=(DestinationAction("stage", "Stage", media / "Staged"),), keep_structure=True,
+                history_retention_days=90, media_mode="both", thumbnail_width=720,
+                thumbnail_policy="lazy", workers=1,
+            )
+            handler = object.__new__(GalleryHandler)
+            handler.server = SimpleNamespace(gallery_config=config, catalog={
+                "items": [
+                    {"id": "c.jpg", "name": "C.jpg", "kind": "picture", "modified": 3, "size": 3},
+                    {"id": "a.jpg", "name": "A.jpg", "kind": "picture", "modified": 1, "size": 1},
+                    {"id": "b.mov", "name": "B.mov", "kind": "video", "modified": 2, "size": 2},
+                ]
+            })
+
+            result = handler.catalog_neighbors_payload("id=a.jpg&kind=picture&sort=name")
+
+            self.assertEqual(result["current"]["id"], "a.jpg")
+            self.assertIsNone(result["previous"])
+            self.assertEqual(result["next"]["id"], "c.jpg")
+            self.assertEqual(result["index"], 0)
+            self.assertEqual(result["total"], 2)
+            self.assertEqual(result["actions"][0]["display_label"], "Stage")
 
 
 class HistoryReconciliationTests(unittest.TestCase):

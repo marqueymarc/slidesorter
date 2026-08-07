@@ -104,6 +104,12 @@ applyThumbnailSize(defaultThumbnailSize, false);
 
 const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
 
+function isTypingTarget(target) {
+  if (!(target instanceof Element)) return false;
+  if (target.matches("input[type=checkbox], input[type=radio]")) return false;
+  return target.matches("input,textarea,select,[contenteditable]:not([contenteditable='false'])");
+}
+
 function restoreScrollPosition(value) {
   const scrollY = Math.max(0, Number(value) || 0);
   let observer = null;
@@ -361,9 +367,11 @@ function restoreSelectionForCatalog() {
 }
 
 function viewerUrl(item) {
-  if (!selectedCount()) return item.viewer_url;
   const url = new URL(item.viewer_url, location.origin);
-  url.searchParams.set("return_token", state.selectionToken);
+  url.searchParams.set("query", state.query);
+  url.searchParams.set("sort", state.sort);
+  url.searchParams.set("kind", state.kind);
+  if (selectedCount()) url.searchParams.set("return_token", state.selectionToken);
   return `${url.pathname}${url.search}`;
 }
 
@@ -516,13 +524,51 @@ function targetedItemForShortcut() {
   return targetId ? state.catalog?.items?.find(item => item.id === targetId) || null : null;
 }
 
+function moveTileFocus(direction) {
+  const cards = [...gallery.querySelectorAll(".card")];
+  if (!cards.length) return;
+  const current = document.activeElement?.closest?.(".card")
+    || cards.find(card => card.dataset.id === state.activeTileId);
+  if (!current) {
+    const first = direction === "ArrowLeft" || direction === "ArrowUp" ? cards.at(-1) : cards[0];
+    first.focus({ preventScroll: true });
+    first.scrollIntoView({ block: "nearest", inline: "nearest" });
+    return;
+  }
+  const currentIndex = cards.indexOf(current);
+  let next = null;
+  if (direction === "ArrowLeft") next = cards[currentIndex - 1];
+  if (direction === "ArrowRight") next = cards[currentIndex + 1];
+  if (direction === "ArrowUp" || direction === "ArrowDown") {
+    const currentRect = current.getBoundingClientRect();
+    const currentCenterX = currentRect.left + currentRect.width / 2;
+    const currentCenterY = currentRect.top + currentRect.height / 2;
+    const candidates = cards
+      .filter(card => card !== current)
+      .map(card => {
+        const rect = card.getBoundingClientRect();
+        const centerY = rect.top + rect.height / 2;
+        return { card, centerX: rect.left + rect.width / 2, centerY };
+      })
+      .filter(candidate => direction === "ArrowUp" ? candidate.centerY < currentCenterY - 4 : candidate.centerY > currentCenterY + 4)
+      .sort((left, right) => {
+        const vertical = direction === "ArrowUp" ? right.centerY - left.centerY : left.centerY - right.centerY;
+        return vertical || Math.abs(left.centerX - currentCenterX) - Math.abs(right.centerX - currentCenterX);
+      });
+    next = candidates[0]?.card || null;
+  }
+  if (!next) return;
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
 function cardMarkup(item, index) {
   const selected = isSelected(item);
   const thumb = `<img class="poster" src="${escapeHtml(item.thumbnail_url)}" alt="Thumbnail for ${escapeHtml(item.name)}" loading="lazy">`;
   const play = item.kind === "video" ? `<button class="play-here" type="button" aria-label="Play ${escapeHtml(item.name)} here" title="Play here"></button>` : "";
   const viewer = viewerUrl(item);
   const folder = String(item.folder || state.catalog.source_label || "");
-  return `<article class="card ${selected ? "selected" : ""}" data-id="${escapeHtml(item.id)}" style="animation-delay:${Math.min(index, 12) * 18}ms">
+  return `<article class="card ${selected ? "selected" : ""}" data-id="${escapeHtml(item.id)}" tabindex="-1" style="animation-delay:${Math.min(index, 12) * 18}ms">
     <div class="preview"><a class="preview-link viewer-link" href="${escapeHtml(viewer)}" target="_blank" rel="noopener" aria-label="Open ${escapeHtml(item.name)} in a new tab">${thumb}</a>${play}<label class="card-select" title="Select ${escapeHtml(item.name)}"><input class="card-checkbox" type="checkbox" ${selected ? "checked" : ""} aria-label="Select ${escapeHtml(item.name)}"></label><button class="tile-actions-trigger" type="button" aria-haspopup="menu" aria-controls="item-action-popover" aria-expanded="false" aria-label="Show destination actions for ${escapeHtml(item.name)}" title="Show destination actions"><span aria-hidden="true">…</span></button></div>
     <div class="card-body"><div class="card-heading"><h2 class="name" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</h2><div class="metadata"><span>${escapeHtml(item.size_label)}</span><span>${escapeHtml(item.modified_label)}</span></div></div><p class="folder" title="${escapeHtml(folder)}">${iconMarkup("folder")}${escapeHtml(folder)}</p><div class="card-utility-actions"><a class="item-action viewer-link" href="${escapeHtml(viewer)}" target="_blank" rel="noopener" title="Open in a new tab · ⇧O with one item selected">↗ Open <kbd class="item-shortcut">⇧O</kbd></a><button class="item-action reveal" type="button" title="Reveal in Finder · ⇧F with one item selected">Finder <kbd class="item-shortcut">⇧F</kbd></button></div></div></article>`;
 }
@@ -1430,7 +1476,7 @@ document.querySelector("#settings-form").addEventListener("submit", async event 
 });
 
 document.addEventListener("keydown", event => {
-  if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target.matches("input,textarea,select")) { event.preventDefault(); search.focus(); }
+  if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey && !isTypingTarget(event.target)) { event.preventDefault(); search.focus(); }
   if (event.key === "Escape" && sheet.classList.contains("open")) closeSettings();
   if (event.key === "Escape") {
     closeActionMenus();
@@ -1443,8 +1489,15 @@ document.addEventListener("keydown", event => {
     return;
   }
   if (event.code === "Space" && state.active && !event.target.matches("input,textarea,button,a,select")) { event.preventDefault(); state.active.video.paused ? state.active.video.play() : state.active.video.pause(); }
-  const typingTarget = event.target.matches("input,textarea,select,[contenteditable]");
-  const selectionShortcutTarget = event.target.matches(".card-checkbox") || !typingTarget;
+  const typingTarget = isTypingTarget(event.target);
+  const selectionShortcutTarget = (event.target instanceof Element && event.target.matches(".card-checkbox")) || !typingTarget;
+  if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    && !event.metaKey && !event.ctrlKey && !event.altKey && !sheet.classList.contains("open")
+    && !state.active && !typingTarget && !event.target.closest?.(".item-action-popover,.action-menu")) {
+    event.preventDefault();
+    moveTileFocus(event.key);
+    return;
+  }
   if (!event.metaKey && !event.ctrlKey && !event.altKey && !sheet.classList.contains("open") && !state.active && selectionShortcutTarget) {
     if (!event.shiftKey && event.code === "KeyU") {
       if (!undoLast.disabled) {

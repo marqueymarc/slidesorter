@@ -6,39 +6,130 @@
   <meta name="color-scheme" content="light dark">
   <title>Viewer · SlideSorter</title>
   <link rel="icon" href="/gallery/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/gallery/app.css?v=3.9.1-ui7">
-  <script src="/gallery/appearance.js?v=3.9.1"></script>
+  <link rel="stylesheet" href="/gallery/app.css?v=3.9.2-ui8">
+  <script src="/gallery/appearance.js?v=3.9.2"></script>
 </head>
 <body>
   <main class="viewer-shell">
     <div class="page-top"><a class="brand-wordmark" href="/gallery/" target="_blank" rel="noopener" aria-label="Open a new SlideSorter gallery tab">SlideSorter</a><span class="summary" id="hint"></span></div>
+    <nav class="viewer-navigation" aria-label="Media navigation"><button class="viewer-nav-button" id="previous" type="button">← Previous</button><span id="position"></span><button class="viewer-nav-button" id="next" type="button">Next →</button></nav>
+    <div class="viewer-actions" id="viewer-actions" aria-label="Destination actions"></div>
+    <p class="viewer-status" id="status" role="status" aria-live="polite"></p>
     <h1 class="viewer-title" id="name">Media viewer</h1>
     <p class="viewer-path" id="path"></p>
     <div id="media"></div>
     <p class="viewer-error" id="error"></p>
   </main>
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.1</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.2</footer>
+  <div class="toast-region" id="toasts" aria-live="polite"></div>
   <script>
     const parameters = new URLSearchParams(location.search);
-    const id = parameters.get("id");
-    const kind = parameters.get("kind");
+    const initialId = parameters.get("id");
     const returnToken = parameters.get("return_token");
+    const filterKind = parameters.get("kind_filter") || parameters.get("kind");
+    const context = {
+      query: parameters.get("query") || "",
+      kind: ["both", "picture", "video"].includes(filterKind) ? filterKind : "both",
+      sort: ["oldest", "newest", "name", "size"].includes(parameters.get("sort")) ? parameters.get("sort") : "oldest",
+    };
     const host = document.querySelector("#media");
     const error = document.querySelector("#error");
-    if (returnToken) document.querySelector(".brand-wordmark").href = `/gallery/?return_token=${encodeURIComponent(returnToken)}`;
-    if (!id) {
-      error.textContent = "Missing media path";
-    } else {
-      const name = id.split("/").pop();
+    const status = document.querySelector("#status");
+    const actionsHost = document.querySelector("#viewer-actions");
+    const previousButton = document.querySelector("#previous");
+    const nextButton = document.querySelector("#next");
+    const position = document.querySelector("#position");
+    const reservedShortcuts = new Set(["u"]);
+    const state = { current: null, previous: null, next: null, actions: [], busy: false };
+    const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
+    const iconPaths = {
+      trash: '<path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/>',
+      tray: '<path d="M12 15V3m0 0L7 8m5-5 5 5M4 14v6h16v-6"/>',
+      archive: '<path d="M4 7h16v13H4zM3 4h18v3H3zm6 8h6"/>',
+      star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3 1.1-6.2L3 9.6l6.2-.9z"/>',
+      check: '<path d="m4 12 5 5L20 6"/>',
+      clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v6l4 2"/>',
+      arrow: '<path d="M5 12h14m-5-5 5 5-5 5"/>',
+    };
+    const iconMarkup = icon => `<svg class="action-glyph" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${iconPaths[icon] || iconPaths.arrow}</svg>`;
+
+    function isTypingTarget(target) {
+      if (!(target instanceof Element)) return false;
+      if (target.matches("input[type=checkbox], input[type=radio]")) return false;
+      return target.matches("input,textarea,select,[contenteditable]:not([contenteditable='false'])");
+    }
+
+    function shortcutInitial(action) {
+      return [...String(action?.display_label || action?.label || "")].find(character => /[\p{L}\p{N}]/u.test(character))?.toLocaleLowerCase() || "";
+    }
+
+    function normalizedShortcut(value) {
+      const shortcut = String(value || "").trim();
+      return [...shortcut].length === 1 && /[\p{L}\p{N}]/u.test(shortcut) ? shortcut.toLocaleLowerCase() : "";
+    }
+
+    function shortcutForAction(action) {
+      const configured = normalizedShortcut(action.shortcut);
+      if (configured && !reservedShortcuts.has(configured)) return configured;
+      const initial = shortcutInitial(action);
+      if (!initial || reservedShortcuts.has(initial)) return "";
+      const matching = state.actions.filter(candidate => shortcutInitial(candidate) === initial).length;
+      const claimed = state.actions.some(candidate => normalizedShortcut(candidate.shortcut) === initial);
+      return matching === 1 && !claimed ? initial : "";
+    }
+
+    function viewerUrl(item) {
+      const url = new URL("/gallery/viewer.html", location.origin);
+      url.searchParams.set("id", item.id);
+      url.searchParams.set("kind", item.kind);
+      url.searchParams.set("query", context.query);
+      url.searchParams.set("sort", context.sort);
+      url.searchParams.set("kind_filter", context.kind);
+      if (returnToken) url.searchParams.set("return_token", returnToken);
+      return `${url.pathname}${url.search}`;
+    }
+
+    function galleryUrl() {
+      return returnToken ? `/gallery/?return_token=${encodeURIComponent(returnToken)}` : "/gallery/";
+    }
+
+    function removeFromSavedSelection(itemId) {
+      if (!returnToken) return;
+      const key = `slidesorter-gallery-selection:${returnToken}`;
+      try {
+        const snapshot = JSON.parse(localStorage.getItem(key) || "null");
+        if (!snapshot) return;
+        if (snapshot.selectionAll) {
+          snapshot.selectedIds = (snapshot.selectedIds || []).filter(id => id !== itemId);
+          snapshot.excludedIds = [...new Set([...(snapshot.excludedIds || []), itemId])];
+        } else {
+          snapshot.selectedIds = (snapshot.selectedIds || []).filter(id => id !== itemId);
+        }
+        snapshot.lastSelectedId = null;
+        if (!snapshot.selectionAll && !snapshot.selectedIds.length) localStorage.removeItem(key);
+        else localStorage.setItem(key, JSON.stringify(snapshot));
+      } catch { /* A stale return token must never interrupt a media action. */ }
+    }
+
+    function renderActions() {
+      actionsHost.innerHTML = state.actions.map(action => {
+        const shortcut = shortcutForAction(action);
+        const shortcutMarkup = shortcut ? `<kbd>${escapeHtml(shortcut.toUpperCase())}</kbd>` : "";
+        return `<button class="viewer-action tone-${escapeHtml(action.tone)}" type="button" data-action-id="${escapeHtml(action.id)}" title="Move to ${escapeHtml(action.display_label)}${shortcut ? ` · shortcut ${escapeHtml(shortcut.toUpperCase())}` : ""}">${iconMarkup(action.icon)}<span>${escapeHtml(action.display_label)}</span>${shortcutMarkup}</button>`;
+      }).join("");
+    }
+
+    function renderMedia(item) {
+      const name = item.name || item.id.split("/").pop();
       document.querySelector("#name").textContent = name;
       document.title = `${name} · SlideSorter`;
-      document.querySelector("#path").textContent = id;
-      const source = `/media/${id.split("/").map(encodeURIComponent).join("/")}`;
-      if (kind === "picture") {
+      document.querySelector("#path").textContent = item.id;
+      host.replaceChildren();
+      if (item.kind === "picture") {
         const image = document.createElement("img");
         image.className = "viewer-media";
         image.alt = name;
-        image.src = source;
+        image.src = item.media_url;
         host.append(image);
       } else {
         const video = document.createElement("video");
@@ -47,17 +138,112 @@
         video.autoplay = true;
         video.playsInline = true;
         video.preload = "metadata";
-        video.src = source;
+        video.src = item.media_url;
         host.append(video);
-        document.querySelector("#hint").textContent = "Space · play/pause";
-        video.play().catch(() => error.textContent = "Playback is ready; use the play control if automatic sound is blocked");
-        document.addEventListener("keydown", event => {
-          if (event.code !== "Space" || event.target.matches("input,textarea,button,a,select")) return;
-          event.preventDefault();
-          video.paused ? video.play() : video.pause();
-        });
+        video.play().catch(() => { status.textContent = "Playback is ready; use the play control if automatic sound is blocked."; });
       }
     }
+
+    function renderNavigation() {
+      previousButton.disabled = !state.previous || state.busy;
+      nextButton.disabled = !state.next || state.busy;
+      position.textContent = state.current ? `${state.index + 1} of ${state.total}` : "";
+      const keys = state.actions.map(action => shortcutForAction(action)).filter(Boolean).map(key => key.toUpperCase()).join(" · ");
+      document.querySelector("#hint").textContent = `${keys ? `${keys} · ` : ""}←/→ navigate · Space play/pause`;
+    }
+
+    function navigate(item) {
+      if (!item || state.busy) return;
+      location.assign(viewerUrl(item));
+    }
+
+    async function request(url, options = {}) {
+      const response = await fetch(url, options);
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "The request failed");
+      return result;
+    }
+
+    async function applyAction(action) {
+      if (!state.current || state.busy) return;
+      state.busy = true;
+      status.textContent = `Moving ${state.current.name} to ${action.display_label}…`;
+      actionsHost.querySelectorAll("button").forEach(button => { button.disabled = true; });
+      renderNavigation();
+      const advanceTo = state.next || state.previous;
+      try {
+        const result = await request("/api/move", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: state.current.id, action_id: action.id }),
+        });
+        removeFromSavedSelection(state.current.id);
+        status.textContent = result.warning || `${result.name} moved to ${result.destination_label || action.display_label}.`;
+        if (advanceTo) navigate(advanceTo);
+        else location.assign(galleryUrl());
+      } catch (moveError) {
+        state.busy = false;
+        status.textContent = moveError.message;
+        actionsHost.querySelectorAll("button").forEach(button => { button.disabled = false; });
+        renderNavigation();
+      }
+    }
+
+    async function load() {
+      if (!initialId) { error.textContent = "Missing media path"; return; }
+      try {
+        const params = new URLSearchParams({ id: initialId, query: context.query, kind: context.kind, sort: context.sort });
+        const result = await request(`/api/catalog-neighbors?${params}`);
+        state.current = result.current;
+        state.previous = result.previous;
+        state.next = result.next;
+        state.actions = Array.isArray(result.actions) ? result.actions : [];
+        state.index = Number(result.index || 0);
+        state.total = Number(result.total || 1);
+        renderActions();
+        renderNavigation();
+        renderMedia(state.current);
+      } catch (loadError) {
+        error.textContent = loadError.message;
+      }
+    }
+
+    if (returnToken) document.querySelector(".brand-wordmark").href = `/gallery/?return_token=${encodeURIComponent(returnToken)}`;
+    previousButton.addEventListener("click", () => navigate(state.previous));
+    nextButton.addEventListener("click", () => navigate(state.next));
+    actionsHost.addEventListener("click", event => {
+      const button = event.target.closest(".viewer-action");
+      const action = state.actions.find(candidate => candidate.id === button?.dataset.actionId);
+      if (action) applyAction(action);
+    });
+    document.addEventListener("keydown", event => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        if (history.length > 1) history.back(); else location.assign(galleryUrl());
+        return;
+      }
+      if (isTypingTarget(event.target)) return;
+      if (["ArrowLeft", "ArrowRight"].includes(event.key) && event.target.closest?.("video")) return;
+      if (event.key === "ArrowLeft" && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); navigate(state.previous); return; }
+      if (event.key === "ArrowRight" && !event.metaKey && !event.ctrlKey && !event.altKey) { event.preventDefault(); navigate(state.next); return; }
+      if (event.code === "Space" && state.current?.kind === "video" && !event.target.matches("button,a,select")) {
+        const video = host.querySelector("video");
+        if (video) { event.preventDefault(); video.paused ? video.play() : video.pause(); }
+        return;
+      }
+      if (event.shiftKey && event.code === "KeyF" && !event.metaKey && !event.ctrlKey && !event.altKey && state.current) {
+        event.preventDefault();
+        request("/api/reveal", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: state.current.id }) })
+          .then(() => { status.textContent = `Revealed ${state.current.name} in Finder.`; })
+          .catch(revealError => { status.textContent = revealError.message; });
+        return;
+      }
+      if (event.key.length !== 1 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || event.repeat || state.busy) return;
+      const candidate = event.key.toLocaleLowerCase();
+      const action = state.actions.find(item => shortcutForAction(item) === candidate);
+      if (action) { event.preventDefault(); applyAction(action); }
+    });
+    load();
   </script>
 </body>
 </html>

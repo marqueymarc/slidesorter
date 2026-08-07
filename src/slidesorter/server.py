@@ -1005,6 +1005,27 @@ class GalleryHandler(SimpleHTTPRequestHandler):
             "items": filtered[start:start + page_size],
         }
 
+    def catalog_neighbors_payload(self, query_string: str) -> dict[str, object]:
+        parameters = parse_qs(query_string)
+        item_id = parameters.get("id", [""])[0]
+        if not item_id:
+            raise ValueError("A media id is required")
+        query = parameters.get("query", [""])[0]
+        kind = parameters.get("kind", ["both"])[0]
+        sort = parameters.get("sort", ["oldest"])[0]
+        ordered = self.ordered_catalog_items(query, kind, sort)
+        index = next((position for position, item in enumerate(ordered) if item.get("id") == item_id), None)
+        if index is None:
+            raise ValueError("The media item is not in the current results")
+        return {
+            "current": ordered[index],
+            "previous": ordered[index - 1] if index else None,
+            "next": ordered[index + 1] if index + 1 < len(ordered) else None,
+            "actions": [action.public_dict() for action in self.config.actions],
+            "index": index,
+            "total": len(ordered),
+        }
+
     def catalog_range(self, body: dict[str, object]) -> None:
         anchor = body.get("anchor")
         target = body.get("target")
@@ -1058,6 +1079,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
                 return
             if parsed.path == "/api/catalog":
                 self.respond_json(HTTPStatus.OK, self.catalog_payload(parsed.query))
+                return
+            if parsed.path == "/api/catalog-neighbors":
+                self.respond_json(HTTPStatus.OK, self.catalog_neighbors_payload(parsed.query))
                 return
         except (ValueError, RuntimeError) as error:
             self.respond_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
