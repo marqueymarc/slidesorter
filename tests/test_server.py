@@ -53,7 +53,7 @@ class UpdateCheckTests(unittest.TestCase):
 
         mocked_open.return_value = Response()
         payload = latest_release_payload()
-        self.assertEqual(payload["current_version"], "3.9.0")
+        self.assertEqual(payload["current_version"], "3.9.1")
         self.assertEqual(payload["latest_version"], "3.10.0")
         self.assertTrue(payload["update_available"])
         self.assertEqual(payload["release_url"], "https://github.com/marqueymarc/slidesorter/releases/tag/v3.10.0")

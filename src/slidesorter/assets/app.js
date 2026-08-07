@@ -1289,9 +1289,12 @@ document.querySelector("#update-check").addEventListener("click", async event =>
   const button = event.currentTarget;
   const status = document.querySelector("#update-status");
   const copy = document.querySelector("#update-copy");
+  const instructions = document.querySelector("#update-instructions");
+  const instructionsCopy = document.querySelector("#update-instructions-copy");
   button.disabled = true;
   button.textContent = "Checking GitHub…";
-  copy.hidden = true;
+  copy.textContent = "Copy command";
+  instructions.classList.remove("available");
   status.classList.remove("error", "available");
   status.textContent = "Contacting GitHub’s public release service…";
   try {
@@ -1300,14 +1303,17 @@ document.querySelector("#update-check").addEventListener("click", async event =>
     });
     if (update.update_available) {
       status.classList.add("available");
+      instructions.classList.add("available");
       status.textContent = `Version ${update.latest_version} is available. Open Release notes to review it, then update with Homebrew if that is how you installed SlideSorter.`;
-      copy.hidden = false;
+      instructionsCopy.textContent = `A newer release is ready. Review the release notes, then use this command if you installed SlideSorter with Homebrew.`;
     } else {
       status.textContent = `You’re up to date with SlideSorter ${update.current_version}. This manual check contacted GitHub only; no collection data was sent.`;
+      instructionsCopy.textContent = "No newer release is available today. Keep this command handy for the next release if you installed SlideSorter with Homebrew.";
     }
   } catch (error) {
     status.classList.add("error");
     status.textContent = error.message;
+    instructionsCopy.textContent = "The check could not reach GitHub, but the normal update command is still available below for Homebrew installs.";
   } finally {
     button.disabled = false;
     button.textContent = "Check for updates";
@@ -1317,7 +1323,7 @@ document.querySelector("#update-copy").addEventListener("click", async event => 
   try {
     await copyText("brew update && brew upgrade slidesorter");
     event.currentTarget.textContent = "Copied";
-    setTimeout(() => { event.currentTarget.textContent = "Copy Homebrew update"; }, 1800);
+    setTimeout(() => { event.currentTarget.textContent = "Copy command"; }, 1800);
   } catch (error) { toast(error.message, { error: true }); }
 });
 document.querySelector("#settings-form").addEventListener("click", event => {

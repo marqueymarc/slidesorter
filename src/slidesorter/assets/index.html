@@ -6,8 +6,8 @@
   <meta name="color-scheme" content="light dark">
   <title>SlideSorter</title>
   <link rel="icon" href="/gallery/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/gallery/app.css?v=3.9.0-ui13">
-  <script src="/gallery/appearance.js?v=3.9.0"></script>
+  <link rel="stylesheet" href="/gallery/app.css?v=3.9.1-ui15">
+  <script src="/gallery/appearance.js?v=3.9.1"></script>
 </head>
 <body>
   <div class="shell">
@@ -44,7 +44,7 @@
     </nav>
   </div>
 
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.0</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.1</footer>
 
   <div class="sheet-scrim" id="settings-scrim" hidden></div>
   <aside class="settings-sheet" id="settings-sheet" aria-labelledby="settings-title" aria-hidden="true">
@@ -73,9 +73,15 @@
         <p class="history-maintenance-note">Missing moved files become Purged and lose Undo. Purged records older than this limit are removed. Available, undoable moves are never pruned.</p>
       </section>
       <section class="about-help" aria-labelledby="about-help-title">
-        <div class="about-help-heading"><div><h3 id="about-help-title">About &amp; help</h3><p>Support and update checks are always your choice.</p></div><span class="about-version">v3.9.0</span></div>
-        <div class="update-check-row"><button class="button quiet" id="update-check" type="button">Check for updates</button><button class="button quiet" id="update-copy" type="button" hidden>Copy Homebrew update</button></div>
+        <div class="about-help-heading"><div><h3 id="about-help-title">About &amp; help</h3><p>Support and update checks are always your choice.</p></div><span class="about-version">v3.9.1</span></div>
+        <div class="update-check-row"><button class="button quiet" id="update-check" type="button">Check for updates</button></div>
         <p class="update-status" id="update-status" role="status">Manual only. Checking contacts GitHub’s release service; no media, paths, thumbnails, or SlideSorter state are sent.</p>
+        <div class="update-instructions" id="update-instructions">
+          <div class="update-instructions-heading"><strong>How to update</strong><span>Homebrew</span></div>
+          <p id="update-instructions-copy">For a Homebrew install, use this command when you want to update SlideSorter. It does not touch your collection.</p>
+          <div class="update-command-row"><code>brew update &amp;&amp; brew upgrade slidesorter</code><button class="button quiet" id="update-copy" type="button">Copy command</button></div>
+          <p class="update-instructions-note">Installed another way? See the <a href="https://github.com/marqueymarc/slidesorter/blob/main/docs/INSTALLATION.md" target="_blank" rel="noreferrer">installation guide</a> for pipx, source, and container updates.</p>
+        </div>
         <nav class="about-links" aria-label="SlideSorter help and project links">
           <a href="https://github.com/marqueymarc/slidesorter/releases/latest" target="_blank" rel="noreferrer">Release notes <span>↗</span></a>
           <a href="https://github.com/marqueymarc/slidesorter/issues/new/choose" target="_blank" rel="noreferrer">Report an issue <span>↗</span></a>
@@ -91,6 +97,6 @@
 
   <aside class="item-action-popover" id="item-action-popover" role="menu" aria-label="Actions for this item" hidden></aside>
   <div class="toast-region" id="toasts" aria-live="polite"></div>
-  <script src="/gallery/app.js?v=3.9.0-ui13" defer></script>
+  <script src="/gallery/app.js?v=3.9.1-ui15" defer></script>
 </body>
 </html>

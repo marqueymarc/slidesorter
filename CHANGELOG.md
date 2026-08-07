@@ -2,6 +2,14 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.9.1] - 2026-08-07
+
+### Fixed
+
+- Kept the Homebrew update command and installation guidance visible after every
+  manual update check, including when the app is already current or GitHub is
+  temporarily unreachable.
+
 ## [3.9.0] - 2026-08-06
 
 ### Added

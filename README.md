@@ -85,7 +85,7 @@ Upgrade later with `brew update && brew upgrade slidesorter`.
 Install the latest GitHub release with `pipx`:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.9.0-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.9.1-py3-none-any.whl"
 ```
 
 Install from a checkout:
@@ -200,8 +200,9 @@ Changing appearance does not rebuild or rescan the collection.
 Settings → **About & help** includes optional links for release notes, issues,
 contributions, and email feedback. Its manual **Check for updates** button contacts
 GitHub only when you press it; it sends no collection data and never installs an
-update. Homebrew users can copy `brew update && brew upgrade slidesorter` when a
-new release is available.
+update. The **How to update** instructions remain available after every check:
+Homebrew users can copy `brew update && brew upgrade slidesorter`, while the
+installation guide covers pipx, source, and container updates.
 
 Read [State and privacy](docs/STATE_AND_PRIVACY.md) before automating cleanup.
 
@@ -226,7 +227,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.9.0
+  ghcr.io/marqueymarc/slidesorter:3.9.1
 ```
 
 The image contains code and `ffmpeg`. The mounted volumes contain all user state.
