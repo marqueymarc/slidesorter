@@ -509,7 +509,11 @@ function updateSummary() {
 function setActiveTile(card) {
   const target = selectedCount() === 0 && card?.classList.contains("card") ? card : null;
   state.activeTileId = target?.dataset.id || null;
-  document.querySelectorAll(".card.shortcut-target").forEach(candidate => candidate.classList.toggle("shortcut-target", candidate === target));
+  // Update every card, not only cards that are already marked.  The old
+  // selector meant the first keyboard-focused card never received the class,
+  // so arrow navigation changed DOM focus without giving the user any visual
+  // indication of where they were.
+  document.querySelectorAll(".card").forEach(candidate => candidate.classList.toggle("shortcut-target", candidate === target));
 }
 
 function setPopoverTarget(card) {
@@ -532,6 +536,7 @@ function moveTileFocus(direction) {
   if (!current) {
     const first = direction === "ArrowLeft" || direction === "ArrowUp" ? cards.at(-1) : cards[0];
     first.focus({ preventScroll: true });
+    setActiveTile(first);
     first.scrollIntoView({ block: "nearest", inline: "nearest" });
     return;
   }
@@ -559,6 +564,7 @@ function moveTileFocus(direction) {
   }
   if (!next) return;
   next.focus({ preventScroll: true });
+  setActiveTile(next);
   next.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
@@ -1266,7 +1272,9 @@ window.addEventListener("resize", () => {
 });
 window.addEventListener("scroll", () => {
   closeItemActionPopover();
-  setActiveTile(null);
+  // Keyboard navigation scrolls the focused card into view. Keep that card
+  // active instead of clearing it as a side effect of its own scroll.
+  if (!document.activeElement?.closest?.(".card")) setActiveTile(null);
 }, { passive: true });
 window.addEventListener("blur", () => {
   closeItemActionPopover();
@@ -1543,15 +1551,6 @@ document.addEventListener("pointerdown", event => {
 gallery.addEventListener("focusin", event => {
   const card = event.target.closest(".card");
   if (card) setActiveTile(card);
-});
-
-gallery.addEventListener("focusout", event => {
-  const card = event.target.closest(".card");
-  if (!card) return;
-  requestAnimationFrame(() => {
-    if (card.contains(document.activeElement)) return;
-    if (state.activeTileId === card.dataset.id) setActiveTile(null);
-  });
 });
 
 Promise.all([loadCatalog(), updateUndoState()]).then(() => {

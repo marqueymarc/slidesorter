@@ -2,6 +2,12 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.9.3] - 2026-08-07
+
+### Fixed
+
+- Arrow-key navigation now keeps the active tile highlighted while scrolling it into view, including vertical movement between rows.
+
 ## [3.9.2] - 2026-08-07
 
 ### Added
