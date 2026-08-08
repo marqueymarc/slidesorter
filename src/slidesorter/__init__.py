@@ -1,3 +1,3 @@
 """SlideSorter: a local-first media review and sorting application."""
 
-__version__ = "3.9.3"
+__version__ = "3.9.4"

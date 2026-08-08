@@ -2,6 +2,16 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.9.4] - 2026-08-07
+
+### Added
+
+- Added Undo and the `U` shortcut to the standalone media viewer.
+
+### Fixed
+
+- Made the keyboard-active tile outline more evident and prevented hover styling from leaving a stale outline on the previous tile.
+
 ## [3.9.3] - 2026-08-07
 
 ### Fixed
