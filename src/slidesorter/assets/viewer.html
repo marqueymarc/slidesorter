@@ -6,27 +6,27 @@
   <meta name="color-scheme" content="light dark">
   <title>Viewer · SlideSorter</title>
   <link rel="icon" href="/gallery/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/gallery/app.css?v=3.9.4-ui8">
-  <script src="/gallery/appearance.js?v=3.9.4"></script>
+  <link rel="stylesheet" href="/gallery/app.css?v=3.9.5-ui8">
+  <script src="/gallery/appearance.js?v=3.9.5"></script>
 </head>
 <body>
   <main class="viewer-shell">
     <div class="page-top"><a class="brand-wordmark" href="/gallery/" target="_blank" rel="noopener" aria-label="Open a new SlideSorter gallery tab">SlideSorter</a><span class="summary" id="hint"></span></div>
     <nav class="viewer-navigation" aria-label="Media navigation"><button class="viewer-nav-button" id="previous" type="button">← Previous</button><span id="position"></span><button class="viewer-nav-button" id="next" type="button">Next →</button></nav>
     <div class="viewer-actions" id="viewer-actions" aria-label="Destination actions"></div>
-    <div class="viewer-actions viewer-utility-actions" aria-label="Viewer actions"><button class="viewer-action tone-neutral" id="viewer-undo" type="button" title="Undo the latest available move · U" disabled><span class="viewer-undo-glyph" aria-hidden="true">↶</span><span>Undo</span><kbd>U</kbd></button></div>
     <p class="viewer-status" id="status" role="status" aria-live="polite"></p>
     <h1 class="viewer-title" id="name">Media viewer</h1>
     <p class="viewer-path" id="path"></p>
     <div id="media"></div>
     <p class="viewer-error" id="error"></p>
   </main>
-  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.4</footer>
+  <footer class="app-footer" aria-label="Application version">SlideSorter v3.9.5</footer>
   <div class="toast-region" id="toasts" aria-live="polite"></div>
   <script>
     const parameters = new URLSearchParams(location.search);
     const initialId = parameters.get("id");
     const returnToken = parameters.get("return_token");
+    const initialUndoToken = parameters.get("undo_token");
     const filterKind = parameters.get("kind_filter") || parameters.get("kind");
     const context = {
       query: parameters.get("query") || "",
@@ -37,12 +37,11 @@
     const error = document.querySelector("#error");
     const status = document.querySelector("#status");
     const actionsHost = document.querySelector("#viewer-actions");
-    const undoButton = document.querySelector("#viewer-undo");
     const previousButton = document.querySelector("#previous");
     const nextButton = document.querySelector("#next");
     const position = document.querySelector("#position");
     const reservedShortcuts = new Set(["u"]);
-    const state = { current: null, previous: null, next: null, actions: [], busy: false };
+    const state = { current: null, previous: null, next: null, actions: [], busy: false, lastActionToken: initialUndoToken || null };
     const escapeHtml = value => String(value).replace(/[&<>'"]/g, character => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[character]);
     const iconPaths = {
       trash: '<path d="M4 7h16M9 7V4h6v3m-8 0 1 13h8l1-13M10 11v5m4-5v5"/>',
@@ -88,6 +87,7 @@
       url.searchParams.set("sort", context.sort);
       url.searchParams.set("kind_filter", context.kind);
       if (returnToken) url.searchParams.set("return_token", returnToken);
+      if (state.lastActionToken) url.searchParams.set("undo_token", state.lastActionToken);
       return `${url.pathname}${url.search}`;
     }
 
@@ -114,11 +114,15 @@
     }
 
     function renderActions() {
-      actionsHost.innerHTML = state.actions.map(action => {
+      const actionMarkup = state.actions.map(action => {
         const shortcut = shortcutForAction(action);
         const shortcutMarkup = shortcut ? `<kbd>${escapeHtml(shortcut.toUpperCase())}</kbd>` : "";
         return `<button class="viewer-action tone-${escapeHtml(action.tone)}" type="button" data-action-id="${escapeHtml(action.id)}" title="Move to ${escapeHtml(action.display_label)}${shortcut ? ` · shortcut ${escapeHtml(shortcut.toUpperCase())}` : ""}">${iconMarkup(action.icon)}<span>${escapeHtml(action.display_label)}</span>${shortcutMarkup}</button>`;
       }).join("");
+      const undoMarkup = state.lastActionToken
+        ? `<button class="viewer-action move-action tone-neutral" id="viewer-undo" type="button" title="Undo the last action here · U"><span class="viewer-undo-glyph" aria-hidden="true">↶</span><span>Undo</span><kbd>U</kbd></button>`
+        : "";
+      actionsHost.innerHTML = actionMarkup + undoMarkup;
     }
 
     function renderMedia(item) {
@@ -154,8 +158,8 @@
       document.querySelector("#hint").textContent = `${keys ? `${keys} · ` : ""}←/→ navigate · Space play/pause`;
     }
 
-    function navigate(item) {
-      if (!item || state.busy) return;
+    function navigate(item, fromAction = false) {
+      if (!item || (state.busy && !fromAction)) return;
       location.assign(viewerUrl(item));
     }
 
@@ -167,26 +171,27 @@
     }
 
     async function updateUndoState() {
-      try {
-        const result = await request("/api/history?limit=1");
-        undoButton.disabled = !result.can_undo;
-      } catch {
-        undoButton.disabled = true;
-      }
+      const button = document.querySelector("#viewer-undo");
+      if (button) button.disabled = !state.lastActionToken || state.busy;
     }
 
     async function undoLatest() {
-      if (state.busy || undoButton.disabled) return;
+      const button = document.querySelector("#viewer-undo");
+      if (state.busy || !state.lastActionToken || button?.disabled) return;
       state.busy = true;
-      undoButton.disabled = true;
+      if (button) button.disabled = true;
       status.textContent = "Undoing the latest move…";
       renderNavigation();
       try {
         const result = await request("/api/undo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ token: state.lastActionToken }),
         });
+        state.lastActionToken = null;
+        const cleanUrl = new URL(location.href);
+        cleanUrl.searchParams.delete("undo_token");
+        history.replaceState(null, "", cleanUrl);
         await load();
         status.textContent = result.warning || `${result.name} restored to its original location.`;
       } catch (undoError) {
@@ -211,9 +216,10 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: state.current.id, action_id: action.id }),
         });
+        state.lastActionToken = result.token || null;
         removeFromSavedSelection(state.current.id);
         status.textContent = result.warning || `${result.name} moved to ${result.destination_label || action.display_label}.`;
-        if (advanceTo) navigate(advanceTo);
+        if (advanceTo) navigate(advanceTo, true);
         else location.assign(galleryUrl());
       } catch (moveError) {
         state.busy = false;
@@ -246,9 +252,9 @@
     if (returnToken) document.querySelector(".brand-wordmark").href = `/gallery/?return_token=${encodeURIComponent(returnToken)}`;
     previousButton.addEventListener("click", () => navigate(state.previous));
     nextButton.addEventListener("click", () => navigate(state.next));
-    undoButton.addEventListener("click", undoLatest);
     actionsHost.addEventListener("click", event => {
       const button = event.target.closest(".viewer-action");
+      if (button?.id === "viewer-undo") { undoLatest(); return; }
       const action = state.actions.find(candidate => candidate.id === button?.dataset.actionId);
       if (action) applyAction(action);
     });
@@ -279,7 +285,7 @@
           .catch(revealError => { status.textContent = revealError.message; });
         return;
       }
-      if (event.key.length !== 1 || event.shiftKey || event.metaKey || event.ctrlKey || event.altKey || event.repeat || state.busy) return;
+      if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey || event.repeat || state.busy) return;
       const candidate = event.key.toLocaleLowerCase();
       const action = state.actions.find(item => shortcutForAction(item) === candidate);
       if (action) { event.preventDefault(); applyAction(action); }

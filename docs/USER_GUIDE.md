@@ -20,7 +20,7 @@ Change page capacity between 25 and 500. Start with 100 on most machines. Type a
 
 Click a card’s central play control to play a video in place. Use native controls to seek. Press Space to play or pause the active video.
 
-Open a media item in a new tab for a larger viewer. The viewer includes Previous/Next controls, arrow-key navigation, and the configured destination buttons with their shortcuts. Applying a destination moves the item recoverably and advances to the adjacent item. The full-screen tab intentionally has no back control because the gallery remains open in its original tab. Press Escape to return when using the viewer in place, or click the SlideSorter wordmark to open a fresh gallery tab.
+Open a media item in a new tab for a larger viewer. The viewer includes Previous/Next controls, arrow-key navigation, and the configured destination buttons with their shortcuts. Applying a destination moves the item recoverably, advances to the adjacent item, and makes a viewer-local Undo available on the same action row. Undo appears only after an action in that viewer and restores that action's item; it does not pick up unrelated history entries. The full-screen tab intentionally has no back control because the gallery remains open in its original tab. Press Escape to return when using the viewer in place, or click the SlideSorter wordmark to open a fresh gallery tab.
 
 When inline playback ends, SlideSorter restores the card poster and selector.
 
@@ -33,11 +33,11 @@ When inline playback ends, SlideSorter restores the card poster and selector.
 - Select all on page to affect only visible results.
 - Select all results to capture the current search and type filter.
 
-Range selection works across pagination because the server resolves the ordered range.
+Range selection works across pagination because the server resolves the ordered range. Destination shortcuts are case-insensitive and accept Shift; with one active tile and no checkbox selection, an action applies to that tile, removes it from the current results, and advances the active outline to the next available tile. `⇧O` opens the active tile in a new tab, and `⇧F` reveals it in Finder; neither conflicts with the browser's ordinary Find shortcut.
 
 ## Route media
 
-The first run creates Stage and Remove destinations. Settings can rename, reorder, remove, or add destinations. Select one or more items to reveal the selection bar: all labels that fit are direct buttons there, and additional destinations appear under More. Each destination can have one unique letter-or-number shortcut; Settings proposes the first label character when it is unique. Destination shortcuts are page-level controls and remain active for the current selection whether or not a menu is visible. When nothing is selected, hovering or focusing a tile makes it the current shortcut target; clicking that tile's discreet `…` opens one shared action popover for the item. The popover is the only place individual destination labels appear, so it never changes grid layout or leaves controls attached to several tiles. `U` is permanently reserved for Undo. Each tile retains Open and Finder controls. With exactly one visible item selected, `⇧O` opens it in a new tab and `⇧F` reveals it in Finder; neither conflicts with the browser's ordinary Find shortcut.
+The first run creates Stage and Remove destinations. Settings can rename, reorder, remove, or add destinations. Select one or more items to reveal the selection bar: all labels that fit are direct buttons there, and additional destinations appear under More. Each destination can have one unique letter-or-number shortcut; Settings proposes the first label character when it is unique. Destination shortcuts are page-level controls and remain active for the current selection whether or not a menu is visible. When nothing is selected, hovering or focusing a tile makes it the current shortcut target; clicking that tile's discreet `…` opens one shared action popover for the item. The popover is the only place individual destination labels appear, so it never changes grid layout or leaves controls attached to several tiles. `U` is permanently reserved for Undo. Each tile retains Open and Finder controls.
 
 By default, SlideSorter preserves each relative path:
 

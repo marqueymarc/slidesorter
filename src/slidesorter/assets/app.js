@@ -380,15 +380,19 @@ function singleSelectedItem() {
   return state.catalog?.items.find(isSelected) || null;
 }
 
+function singleShortcutItem() {
+  return singleSelectedItem() || (selectedCount() === 0 ? targetedItemForShortcut() : null);
+}
+
 function openSingleSelectedItem() {
-  const item = singleSelectedItem();
+  const item = singleShortcutItem();
   if (!item) return;
   window.open(viewerUrl(item), "_blank", "noopener");
   toast(`Opened ${item.name}`);
 }
 
 function revealSingleSelectedItem() {
-  const item = singleSelectedItem();
+  const item = singleShortcutItem();
   if (!item) return;
   jsonRequest("/api/reveal", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: item.id }),
@@ -566,6 +570,22 @@ function moveTileFocus(direction) {
   next.focus({ preventScroll: true });
   setActiveTile(next);
   next.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function adjacentCardId(itemId) {
+  const cards = [...gallery.querySelectorAll(".card")];
+  const index = cards.findIndex(card => card.dataset.id === itemId);
+  if (index < 0) return null;
+  return cards[index + 1]?.dataset.id || cards[index - 1]?.dataset.id || null;
+}
+
+function focusCardById(itemId) {
+  if (!itemId) return;
+  const card = [...gallery.querySelectorAll(".card")].find(candidate => candidate.dataset.id === itemId);
+  if (!card) return;
+  card.focus({ preventScroll: true });
+  setActiveTile(card);
+  card.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
 function cardMarkup(item, index) {
@@ -748,6 +768,8 @@ async function undo(token = null) {
 }
 
 async function performBulkMove(action) {
+  const selectedVisible = (state.catalog?.items || []).filter(isSelected);
+  const focusAfterMoveId = selectedVisible.length === 1 ? adjacentCardId(selectedVisible[0].id) : null;
   closeActionMenus();
   closeItemActionPopover();
   setActiveTile(null);
@@ -755,7 +777,7 @@ async function performBulkMove(action) {
   if (!count || state.bulkMoving) return;
   state.bulkMoving = true;
   const buttons = [...document.querySelectorAll(".move-action")];
-  const visibleSelected = new Set((state.catalog?.items || []).filter(isSelected).map(item => item.id));
+  const visibleSelected = new Set(selectedVisible.map(item => item.id));
   const transition = captureGalleryTransition(visibleSelected);
   buttons.forEach(button => { button.disabled = true; });
   try {
@@ -766,6 +788,7 @@ async function performBulkMove(action) {
     await fadeDepartures(transition);
     clearSelection();
     await loadCatalog(false, transition);
+    focusCardById(focusAfterMoveId);
     await updateUndoState();
     toast(result.warning || `${result.count.toLocaleString()} items moved to ${result.destination_label || action.display_label}`, {
       error: Boolean(result.warning), thumbnail: result.thumbnail_url,
@@ -1514,13 +1537,13 @@ document.addEventListener("keydown", event => {
       }
       return;
     }
-    if (event.shiftKey && selectedCount() === 1) {
+    if (event.shiftKey && (selectedCount() === 1 || targetedItemForShortcut())) {
       if (event.code === "KeyO") { event.preventDefault(); openSingleSelectedItem(); return; }
       if (event.code === "KeyF") { event.preventDefault(); revealSingleSelectedItem(); return; }
     }
   }
   if (
-    event.key.length === 1 && !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat
+    event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey && !event.repeat
     && !sheet.classList.contains("open") && !state.active && !typingTarget
   ) {
     const action = actionForShortcut(event.key);

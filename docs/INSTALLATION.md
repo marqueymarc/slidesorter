@@ -33,7 +33,7 @@ pipx ensurepath
 Install the release wheel:
 
 ```sh
-pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.9.4-py3-none-any.whl"
+pipx install "https://github.com/marqueymarc/slidesorter/releases/latest/download/slidesorter-3.9.5-py3-none-any.whl"
 ```
 
 Verify the command:
@@ -91,7 +91,7 @@ docker run --rm \
   -p 127.0.0.1:8765:8765 \
   -v "/path/to/Media:/media" \
   -v "slidesorter-state:/state" \
-  ghcr.io/marqueymarc/slidesorter:3.9.4
+  ghcr.io/marqueymarc/slidesorter:3.9.5
 ```
 
 Mount `/media` read-write to use destination actions and Undo. Mount it read-only only for browsing.

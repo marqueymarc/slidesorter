@@ -2,6 +2,15 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [3.9.5] - 2026-08-07
+
+### Fixed
+
+- Shift-modified tile shortcuts now open the active tile and execute configured actions such as Remove.
+- Acting on a single tile advances focus to the next available tile after it leaves the gallery.
+- Standalone viewer actions now advance to the next item instead of being blocked by the busy state.
+- Viewer Undo is scoped to the last action performed in that viewer, appears on the action row only when available, and preserves tile-page destination colors.
+
 ## [3.9.4] - 2026-08-07
 
 ### Added
