@@ -1160,6 +1160,9 @@ class GalleryHandler(SimpleHTTPRequestHandler):
                 elif action == "/api/rebuild-history":
                     self.rebuild_history(self.read_json_body(allow_empty=True))
                 elif action == "/api/refresh":
+                    # Consume an optional JSON body so a keep-alive connection
+                    # cannot reinterpret it as the next HTTP request.
+                    self.read_json_body(allow_empty=True)
                     self.refresh_gallery()
                 elif action == "/api/undo":
                     self.undo_move(self.read_json_body(allow_empty=True))
