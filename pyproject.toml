@@ -26,6 +26,9 @@ classifiers = [
   "Topic :: Multimedia :: Graphics :: Viewers",
   "Topic :: Multimedia :: Video :: Display",
 ]
+dependencies = [
+  "Pillow>=10",
+]
 
 [project.urls]
 Homepage = "https://github.com/marqueymarc/slidesorter"

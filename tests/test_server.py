@@ -408,9 +408,9 @@ class CatalogNavigationTests(unittest.TestCase):
             handler = object.__new__(GalleryHandler)
             handler.server = SimpleNamespace(gallery_config=config, catalog={
                 "items": [
-                    {"id": "c.jpg", "name": "C.jpg", "kind": "picture", "modified": 3, "size": 3},
-                    {"id": "a.jpg", "name": "A.jpg", "kind": "picture", "modified": 1, "size": 1},
-                    {"id": "b.mov", "name": "B.mov", "kind": "video", "modified": 2, "size": 2},
+                    {"id": "c.jpg", "name": "C.jpg", "kind": "picture", "modified": 3, "date_sort": 1, "size": 3},
+                    {"id": "a.jpg", "name": "A.jpg", "kind": "picture", "modified": 1, "date_sort": 3, "size": 1},
+                    {"id": "b.mov", "name": "B.mov", "kind": "video", "modified": 2, "date_sort": 2, "size": 2},
                 ]
             })
 
@@ -422,6 +422,10 @@ class CatalogNavigationTests(unittest.TestCase):
             self.assertEqual(result["index"], 0)
             self.assertEqual(result["total"], 2)
             self.assertEqual(result["actions"][0]["display_label"], "Stage")
+
+            oldest = handler.catalog_neighbors_payload("id=a.jpg&kind=picture&sort=oldest")
+            self.assertEqual(oldest["current"]["id"], "a.jpg")
+            self.assertEqual(oldest["previous"]["id"], "c.jpg")
 
 
 class HistoryReconciliationTests(unittest.TestCase):

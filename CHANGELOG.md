@@ -2,6 +2,12 @@
 
 All notable changes appear here. SlideSorter follows semantic versioning.
 
+## [Unreleased]
+
+### Added
+
+- Capture-date metadata for pictures and videos, with capture-based Oldest/Newest sorting and an explicit file-time fallback.
+
 ## [3.9.5] - 2026-08-07
 
 ### Fixed

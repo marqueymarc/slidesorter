@@ -12,13 +12,13 @@ SlideSorter scans recursively. It excludes every configured destination tree whe
 
 ## Browse
 
-Use the picture, video, and combined filters to narrow the collection. Search matches filenames and relative folder names. Sorting runs on the server and remains consistent across pages.
+Use the picture, video, and combined filters to narrow the collection. Search matches filenames and relative folder names. Sorting runs on the server and remains consistent across pages. Oldest/Newest use the media's embedded capture time when available, rather than the time the file was copied. If capture metadata is absent, SlideSorter labels the displayed time as a file-time fallback.
 
 Change page capacity between 25 and 500. Start with 100 on most machines. Type an arbitrary page number and press Enter to jump there.
 
 ## Preview media
 
-Click a card’s central play control to play a video in place. Use native controls to seek. Press Space to play or pause the active video.
+Each card shows the capture date and time when embedded metadata provides it. Hover the date for its source. Click a card’s central play control to play a video in place. Use native controls to seek. Press Space to play or pause the active video.
 
 Open a media item in a new tab for a larger viewer. The viewer includes Previous/Next controls, arrow-key navigation, and the configured destination buttons with their shortcuts. Applying a destination moves the item recoverably, advances to the adjacent item, and makes a viewer-local Undo available on the same action row. Undo appears only after an action in that viewer and restores that action's item; it does not pick up unrelated history entries. The full-screen tab intentionally has no back control because the gallery remains open in its original tab. Press Escape to return when using the viewer in place, or click the SlideSorter wordmark to open a fresh gallery tab.
 

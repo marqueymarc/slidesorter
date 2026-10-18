@@ -19,7 +19,7 @@ information only; GitHub Pages never receives your media or SlideSorter state.
 - Browse tens of thousands of pictures and videos with server-backed pagination.
 - Search filenames and folders without rendering the entire collection.
 - Filter pictures, videos, or both.
-- Sort by age, name, size, or modification time.
+- Sort by capture date, name, size, or an explicit file-time fallback.
 - Play videos inline with seeking and keyboard play/pause.
 - Expand pictures without leaving the gallery.
 - Select one item, a page, a Shift range, or all filtered results.
@@ -34,6 +34,7 @@ information only; GitHub Pages never receives your media or SlideSorter state.
 - Reveal original files in Finder, Explorer, or a Linux file manager.
 - Keep source code separate from all generated runtime state.
 - Use Tailscale Serve for private remote access.
+- Read embedded picture and video capture dates locally, with filesystem time as a labeled fallback.
 
 ## Safety first
 
@@ -54,6 +55,7 @@ Back up irreplaceable media before reorganizing it. See [Security](SECURITY.md) 
 ## Requirements
 
 - Python 3.11 or newer
+- Pillow (installed automatically) for embedded image metadata
 - `ffmpeg` for video thumbnails and broad image support
 - macOS or Linux
 - A modern browser

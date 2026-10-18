@@ -964,14 +964,20 @@ class GalleryHandler(SimpleHTTPRequestHandler):
                 or query in f"{item.get('name', '')} {item.get('folder', '')}".casefold()
             )
         ]
+        def date_sort_value(item: dict[str, object]) -> float:
+            try:
+                return float(item.get("date_sort", item.get("modified", 0)))
+            except (TypeError, ValueError):
+                return float(item.get("modified", 0) or 0)
+
         if sort == "newest":
-            filtered.sort(key=lambda item: (-float(item.get("modified", 0)), str(item.get("id", "")).casefold()))
+            filtered.sort(key=lambda item: (-date_sort_value(item), str(item.get("id", "")).casefold()))
         elif sort == "name":
             filtered.sort(key=lambda item: str(item.get("name", "")).casefold())
         elif sort == "size":
             filtered.sort(key=lambda item: (-int(item.get("size", 0)), str(item.get("id", "")).casefold()))
         else:
-            filtered.sort(key=lambda item: (float(item.get("modified", 0)), str(item.get("id", "")).casefold()))
+            filtered.sort(key=lambda item: (date_sort_value(item), str(item.get("id", "")).casefold()))
         return filtered
 
     def catalog_payload(self, query_string: str) -> dict[str, object]:

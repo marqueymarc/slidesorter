@@ -36,6 +36,14 @@ Yes. Keep the server on localhost and use Tailscale Serve. Do not expose it anon
 
 The browser may not support that file’s codec or container. SlideSorter does not transcode media.
 
+## Which date does SlideSorter show?
+
+SlideSorter prefers the original capture date embedded in the media: EXIF
+`DateTimeOriginal` for pictures and QuickTime/ffprobe creation metadata for
+videos. Oldest/Newest use that capture time. If the media has no readable
+capture metadata, the tile shows the filesystem modification time as an
+explicit fallback. SlideSorter never changes the file timestamp.
+
 ## Why is seeking unavailable?
 
 Seeking requires a browser-supported format and HTTP byte ranges. SlideSorter supplies byte ranges, but the browser controls codec support.

@@ -15,7 +15,7 @@ flowchart LR
   D -->|"Validated file moves"| A
 ```
 
-The package contains no database and no user media. The builder derives a JSON catalog. The server loads it into memory and serves static assets, thumbnails, byte-range media, and controlled action APIs.
+The package contains no database and no user media. The builder derives a JSON catalog, including embedded capture metadata when available. The server loads it into memory and serves static assets, thumbnails, byte-range media, and controlled action APIs.
 
 ## Package layout
 
@@ -24,6 +24,7 @@ src/slidesorter/
 ├── actions.py
 ├── cli.py
 ├── builder.py
+├── metadata.py
 ├── server.py
 └── assets/
     ├── index.html
@@ -61,7 +62,7 @@ Static assets are copied into state during each build. This ensures one state di
 
 1. The browser requests `/gallery/`.
 2. The app requests one `/api/catalog` page.
-3. The server filters and sorts its in-memory catalog.
+3. The server filters and sorts its in-memory catalog. Oldest/Newest use embedded capture time and fall back explicitly to filesystem modification time when capture metadata is unavailable.
 4. The browser lazily requests `/thumbnail/...` URLs.
 5. The server creates missing cached posters.
 6. Media plays through `/media/...` with HTTP byte ranges.

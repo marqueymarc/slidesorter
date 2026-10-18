@@ -20,6 +20,7 @@ from .actions import (
     legacy_actions,
     validate_actions,
 )
+from .metadata import capture_metadata
 from .state import (
     APPEARANCE_MODES,
     DEFAULT_PROFILE,
@@ -306,6 +307,7 @@ def main(argv: list[str] | None = None) -> None:
         stat = media.stat()
         thumb, problem = results[media]
         kind = "video" if media.suffix.lower() in VIDEO_EXTENSIONS else "picture"
+        date_metadata = capture_metadata(media, kind, stat.st_mtime)
         encoded_id = "/".join(quote(part, safe="") for part in relative.split("/"))
         items.append(
             {
@@ -317,6 +319,7 @@ def main(argv: list[str] | None = None) -> None:
                 "size_label": human_size(stat.st_size),
                 "modified": stat.st_mtime,
                 "modified_label": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d"),
+                **date_metadata,
                 "media_url": f"/media/{encoded_id}",
                 "thumbnail_url": f"/thumbnail/{encoded_id}?v={thumb.stem}",
                 "thumbnail_cache_url": f"/gallery/thumbs/{thumb.name}",
@@ -327,7 +330,7 @@ def main(argv: list[str] | None = None) -> None:
 
     generated_at = datetime.now().astimezone().isoformat()
     catalog = {
-        "version": 5,
+        "version": 6,
         "generated_at": generated_at,
         "title": title,
         "source_label": source_label,
@@ -337,7 +340,7 @@ def main(argv: list[str] | None = None) -> None:
         "items": items,
     }
     config = {
-        "version": 5,
+        "version": 6,
         "media_root": str(media_root),
         "gallery_root": str(gallery_root),
         "state_identity": state_identity(media_root, profile),
